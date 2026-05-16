@@ -1,0 +1,10 @@
+train: images/train
+val: images/val
+
+nc: 4
+
+names:
+  0: mouse
+  1: keyboard
+  2: monitor
+  3: ram

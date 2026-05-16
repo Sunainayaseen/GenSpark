@@ -1,0 +1,23 @@
+{% extends "admin/base_admin.html" %}
+{% block page_title %}{{ 'Edit' if category else 'Add' }} Category{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Category</li>{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <form method="post" action="{{ url_for('admin.category_add') if not category else url_for('admin.category_edit', category_id=category.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" name="name" class="form-control" value="{{ category.name if category else '' }}" required>
+      </div>
+      <div class="form-group">
+        <label>Slug</label>
+        <input type="text" name="slug" class="form-control" value="{{ category.slug if category else '' }}" placeholder="optional">
+      </div>
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a href="{{ url_for('admin.categories_list') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

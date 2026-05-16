@@ -1,0 +1,57 @@
+/* App-specific styles */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+  background: var(--bg-primary);
+}
+
+/* Route lazy-load placeholder — keeps header/footer, replaces main only */
+.page-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  min-height: min(60vh, 560px);
+  padding: var(--spacing-2xl) var(--spacing-lg);
+  color: rgba(var(--primary-rgb), 0.85);
+}
+
+.page-loading .loading-spinner {
+  width: 28px;
+  height: 28px;
+  border-width: 3px;
+}
+
+/* Page Transition Animations */
+.main-content {
+  position: relative;
+  width: 100%;
+  transition: opacity 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-content {
+    transition: none;
+  }
+}
+
+.main-content.page-enter {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.main-content.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.main-content.page-exit-active {
+  opacity: 0;
+  transform: translateY(-12px);
+  transition-duration: 0.25s;
+}

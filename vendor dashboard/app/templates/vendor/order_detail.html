@@ -1,0 +1,75 @@
+{% extends "vendor/base_vendor.html" %}
+{% block page_title %}Order #{{ order.id }}{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item"><a href="{{ url_for('vendor.orders_list') }}">Orders</a></li><li class="breadcrumb-item active">Detail</li>{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Order Info</div>
+      <div class="card-body">
+        <p><strong>Order #:</strong> {{ order.order_number or order.id }}</p>
+        <p><strong>Customer:</strong> {{ order.customer.name }} ({{ order.customer.email }})</p>
+        <p><strong>Total:</strong> Rs.{{ "%.2f"|format(order.total_amount or 0) }}</p>
+        <p><strong>Status:</strong> <span class="badge badge-info">{{ order.status | status_label }}</span></p>
+        <p><strong>Shipping:</strong> {{ order.shipping_address or '-' }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Items</div>
+      <div class="card-body">
+        <ul class="list-group">
+          {% for item in order.items %}
+          <li class="list-group-item d-flex justify-content-between">
+            <span>{{ item.item_type }} #{{ item.item_id }} x {{ item.quantity }}</span>
+            <span>Rs.{{ "%.2f"|format(item.total_price or 0) }}</span>
+          </li>
+          {% else %}
+          <li class="list-group-item">No items</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% if order.status == 'assigned' %}
+<form method="post" action="{{ url_for('vendor.vendor_order_status_update', order_id=order.id) }}" class="d-inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="status" value="accepted">
+  <button type="submit" class="btn btn-success">Accept</button>
+</form>
+<form method="post" action="{{ url_for('vendor.vendor_order_status_update', order_id=order.id) }}" class="d-inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="status" value="rejected">
+  <button type="submit" class="btn btn-danger">Reject</button>
+</form>
+{% endif %}
+{% if order.status in ['accepted', 'assembling'] %}
+<form method="post" action="{{ url_for('vendor.vendor_order_status_update', order_id=order.id) }}" class="d-inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="status" value="assembling">
+  <button type="submit" class="btn btn-primary">Mark Assembling</button>
+</form>
+<form method="post" action="{{ url_for('vendor.vendor_order_status_update', order_id=order.id) }}" class="d-inline" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="status" value="completed">
+  <input type="file" name="proof_image" accept="image/png,image/jpeg,image/webp" class="form-control d-inline-block" style="width:260px;">
+  <button type="submit" class="btn btn-success">Mark Completed</button>
+</form>
+{% endif %}
+<a href="{{ url_for('vendor.orders_list') }}" class="btn btn-secondary">Back</a>
+
+{% if order.proof_image_url %}
+  <div class="mt-3">
+    <small class="text-muted">Proof image:</small><br>
+    <a href="{{ order.proof_image_url }}" target="_blank" rel="noopener">View uploaded proof</a>
+    {% if not order.proof_approved %}
+      <p class="text-warning small mb-0 mt-1">Waiting for admin approval</p>
+    {% else %}
+      <p class="text-success small mb-0 mt-1">Approved by admin</p>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

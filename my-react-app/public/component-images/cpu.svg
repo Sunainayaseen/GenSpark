@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+  <defs>
+    <linearGradient id="cpu" x1="0" y1="0" x2="120" y2="80">
+      <stop stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="80" rx="8" fill="url(#cpu)"/>
+  <rect x="40" y="28" width="40" height="40" rx="4" stroke="#38bdf8" stroke-width="1.5" fill="rgba(56,189,248,0.12)"/>
+  <path d="M40 36h-8M40 44h-8M40 52h-8M40 60h-8M80 36h8M80 44h8M80 52h8M80 60h8M48 28v-8M56 28v-8M64 28v-8M72 28v-8M48 68v8M56 68v8M64 68v8M72 68v8" stroke="#94a3b8" stroke-width="1.2"/>
+  <rect x="52" y="40" width="16" height="16" rx="2" stroke="#94a3b8" stroke-width="1.2"/>
+</svg>

@@ -1,0 +1,318 @@
+/* GenSpark - Professional UI overrides (Pakistan / PKR) */
+
+:root {
+  --genspark-primary: #1e40af;
+  --genspark-primary-dark: #1e3a8a;
+  --genspark-sidebar: #1e293b;
+  --genspark-card-shadow: 0 1px 3px rgba(0,0,0,.08);
+  --genspark-card-shadow-hover: 0 4px 12px rgba(0,0,0,.1);
+}
+
+/* Typography */
+body {
+  font-family: 'Inter', 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.content-wrapper {
+  background: #f1f5f9;
+}
+
+/* Navbar */
+.main-header.navbar {
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.main-header .navbar-nav .nav-link {
+  font-weight: 500;
+  color: #475569;
+}
+
+.main-header .navbar-nav .nav-link:hover {
+  color: var(--genspark-primary);
+}
+
+/* Sidebar */
+.main-sidebar {
+  background: var(--genspark-sidebar) !important;
+}
+
+.main-sidebar .brand-link {
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  padding: 1rem 1.2rem;
+}
+
+.main-sidebar .brand-text {
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.main-sidebar .nav-sidebar .nav-link {
+  border-radius: 0.375rem;
+  margin: 0 0.5rem 2px 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.main-sidebar .nav-sidebar .nav-link:hover {
+  background: rgba(255,255,255,.08);
+}
+
+.main-sidebar .nav-sidebar .nav-link.active,
+.main-sidebar .nav-sidebar .nav-link:focus {
+  background: rgba(255,255,255,.12);
+}
+
+.main-sidebar .nav-header {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  padding: 1rem 1rem 0.5rem;
+}
+
+/* Content header */
+.content-header {
+  padding: 0.75rem 0 0.5rem;
+}
+
+.content-header h1 {
+  font-weight: 600;
+  font-size: 1.35rem;
+  color: #0f172a;
+}
+
+.breadcrumb {
+  font-size: 0.875rem;
+  background: transparent;
+}
+
+.breadcrumb-item a {
+  color: #64748b;
+}
+
+.breadcrumb-item.active {
+  color: #0f172a;
+}
+
+/* Cards */
+.card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  box-shadow: var(--genspark-card-shadow);
+  transition: box-shadow 0.2s;
+}
+
+.card:hover {
+  box-shadow: var(--genspark-card-shadow-hover);
+}
+
+.card-header {
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 600;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.card-header .card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.card-body {
+  padding: 1.25rem;
+}
+
+/* Small boxes (dashboard stats) */
+.small-box {
+  border-radius: 0.5rem;
+  box-shadow: var(--genspark-card-shadow);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.small-box:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--genspark-card-shadow-hover);
+}
+
+.small-box .inner {
+  padding: 1rem 1.25rem;
+}
+
+.small-box .inner h3 {
+  font-weight: 700;
+  font-size: 1.75rem;
+}
+
+.small-box .inner p {
+  font-size: 0.9rem;
+  opacity: 0.95;
+}
+
+.small-box .small-box-footer {
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+/* Tables */
+.table {
+  font-size: 0.9rem;
+}
+
+.table thead th {
+  font-weight: 600;
+  text-transform: none;
+  color: #0f172a;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.75rem 1rem;
+}
+
+.table tbody td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+}
+
+.table-hover tbody tr:hover {
+  background: #f8fafc;
+}
+
+.table .badge {
+  font-weight: 500;
+  padding: 0.35em 0.65em;
+}
+
+/* Buttons */
+.btn {
+  font-weight: 500;
+  border-radius: 0.375rem;
+  transition: all 0.2s;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+}
+
+.btn-primary {
+  background: var(--genspark-primary);
+  border-color: var(--genspark-primary);
+}
+
+.btn-primary:hover {
+  background: var(--genspark-primary-dark);
+  border-color: var(--genspark-primary-dark);
+}
+
+/* Alerts */
+.alert {
+  border-radius: 0.5rem;
+  border: none;
+  font-weight: 500;
+}
+
+.alert-success { background: #ecfdf5; color: #065f46; }
+.alert-danger { background: #fef2f2; color: #991b1b; }
+.alert-warning { background: #fffbeb; color: #92400e; }
+.alert-info { background: #eff6ff; color: #1e40af; }
+
+/* List groups */
+.list-group-item {
+  border-color: #f1f5f9;
+  padding: 0.75rem 1rem;
+}
+
+/* Footer */
+.main-footer {
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+/* Content area spacing */
+.content .container-fluid {
+  padding-top: 0.5rem;
+}
+
+/* Form controls */
+.form-control {
+  border-radius: 0.375rem;
+  border-color: #e2e8f0;
+}
+
+.select2-container--default .select2-selection--single {
+  border-radius: 0.375rem;
+  border-color: #e2e8f0;
+}
+
+.form-control:focus {
+  border-color: var(--genspark-primary);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.15);
+}
+
+/* Login / Register pages */
+.login-page .login-box,
+.register-page .register-box {
+  width: 100%;
+  max-width: 420px;
+}
+
+.login-page .card,
+.register-page .card {
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 40px rgba(0,0,0,.1);
+  border: 1px solid #e2e8f0;
+}
+
+.login-logo a,
+.register-page .login-logo,
+.login-logo b {
+  font-weight: 700;
+  font-size: 1.75rem;
+  color: var(--genspark-primary) !important;
+}
+
+.login-page .login-logo a:hover,
+.register-page .login-logo a:hover {
+  color: var(--genspark-primary-dark) !important;
+}
+
+.login-card-body,
+.register-card-body {
+  padding: 2rem;
+}
+
+.login-box-msg,
+.register-card-body .login-box-msg {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin-bottom: 1.5rem;
+}
+
+.input-group-text {
+  border-radius: 0 0.375rem 0.375rem 0;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+.input-group .form-control {
+  border-radius: 0.375rem 0 0 0.375rem;
+}
+
+.input-group .form-control:focus + .input-group-append .input-group-text {
+  border-color: var(--genspark-primary);
+}
+
+/* User badge in navbar */
+.navbar .nav-link .badge {
+  font-size: 0.75rem;
+}

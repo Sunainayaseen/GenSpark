@@ -1,0 +1,88 @@
+{% extends "vendor/base_vendor.html" %}
+{% block page_title %}Inventory{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Inventory</li>{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h3 class="card-title mb-0">My Inventory</h3>
+        <small class="text-muted">Manage predefined PC components in your stock.</small>
+      </div>
+      <a href="{{ url_for('vendor.inventory_add') }}" class="btn btn-sm btn-primary">
+        <i class="fas fa-plus mr-1"></i> Add Component
+      </a>
+    </div>
+  </div>
+  <div class="card-body">
+    <form method="get" action="{{ url_for('vendor.inventory') }}" class="form-inline mb-3">
+      <label class="mr-2">Filter by brand:</label>
+      <select name="brand_id" class="form-control form-control-sm mr-2" onchange="this.form.submit()">
+        <option value="">All brands</option>
+        {% for b in brands %}
+        <option value="{{ b.id }}" {{ 'selected' if selected_brand_id == b.id else '' }}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <div class="table-responsive p-0">
+      <table class="table table-hover table-striped mb-0">
+      <thead>
+        <tr>
+          <th style="width: 70px;">ID</th>
+          <th>Brand</th>
+          <th>Component</th>
+          <th>Model</th>
+          <th style="width: 110px;">Stock</th>
+          <th style="width: 110px;">Price</th>
+          <th style="width: 110px;">Status</th>
+          <th style="width: 130px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        {% set comp = item.component %}
+        {% set brand = comp.brand.name if comp and comp.brand else (comp.specs.get('brand') if comp and comp.specs else (comp.name.split(' ')[0] if comp else '-')) %}
+        {% set model = comp.specs.get('model') if comp and comp.specs else (comp.name if comp else '-') %}
+        {% if item.quantity == 0 %}
+          {% set status_label = 'Out of Stock' %}
+          {% set status_class = 'badge badge-danger' %}
+        {% elif item.quantity <= 10 %}
+          {% set status_label = 'Low Stock' %}
+          {% set status_class = 'badge badge-warning' %}
+        {% else %}
+          {% set status_label = 'In Stock' %}
+          {% set status_class = 'badge badge-success' %}
+        {% endif %}
+        <tr>
+          <td>{{ item.id }}</td>
+          <td>{{ brand }}</td>
+          <td>{{ comp.category.name if comp and comp.category else '-' }}</td>
+          <td>{{ model }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>Rs.{{ "%.2f"|format(item.price or 0) }}</td>
+          <td><span class="{{ status_class }}">{{ status_label }}</span></td>
+          <td>
+            <!-- For now, Edit/Delete go to the existing add form; separate edit/delete routes can be wired later -->
+            <a href="{{ url_for('vendor.inventory_add') }}?component_id={{ comp.id if comp else '' }}" class="btn btn-xs btn-primary mr-1">
+              Edit
+            </a>
+            <button type="button" class="btn btn-xs btn-danger" disabled title="Delete action can be added later">
+              Delete
+            </button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center">
+            No inventory yet.
+            <a href="{{ url_for('vendor.inventory_add') }}">Add components</a> to get started.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

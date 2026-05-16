@@ -1,0 +1,85 @@
+/* Custom cursor – smooth follow + hover effects. Only when reduced-motion is off. */
+.cursor-effects {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 99999;
+  transform: translate(var(--cursor-x, 0), var(--cursor-y, 0));
+  transition: opacity 0.2s ease;
+  opacity: 0;
+  will-change: transform;
+}
+
+.cursor-effects.visible {
+  opacity: 1;
+}
+
+.cursor-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  background: rgba(var(--primary-rgb), 0.95);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+  transition: transform 0.2s ease, background 0.2s ease, width 0.2s ease, height 0.2s ease, margin 0.2s ease;
+}
+
+.cursor-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border: 2px solid rgba(var(--primary-rgb), 0.5);
+  border-radius: 50%;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              margin 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.2s ease,
+              box-shadow 0.2s ease,
+              opacity 0.2s ease;
+  box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.2);
+}
+
+/* Hover state: ring expands, dot slightly bigger, stronger glow */
+.cursor-effects.hover .cursor-dot {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  background: var(--primary);
+  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.6);
+}
+
+.cursor-effects.hover .cursor-ring {
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-color: rgba(var(--primary-rgb), 0.6);
+  box-shadow: 0 0 24px rgba(var(--primary-rgb), 0.35);
+  opacity: 1;
+}
+
+/* Hide default cursor when custom cursor is active (only on desktop, not touch) */
+@media (pointer: fine) {
+  body.cursor-effects-active {
+    cursor: none;
+  }
+
+  body.cursor-effects-active a,
+  body.cursor-effects-active button,
+  body.cursor-effects-active [role="button"],
+  body.cursor-effects-active input,
+  body.cursor-effects-active select,
+  body.cursor-effects-active textarea,
+  body.cursor-effects-active .btn {
+    cursor: none;
+  }
+}

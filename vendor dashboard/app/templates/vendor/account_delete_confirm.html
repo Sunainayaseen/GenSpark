@@ -1,0 +1,30 @@
+{% extends "vendor/base_vendor.html" %}
+{% block page_title %}Delete Account{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item"><a href="{{ url_for('vendor.profile') }}">Profile</a></li><li class="breadcrumb-item active">Delete Account</li>{% endblock %}
+
+{% block content %}
+<div class="card card-danger card-outline">
+  <div class="card-header">
+    <h3 class="card-title">Delete My Account</h3>
+  </div>
+  <div class="card-body">
+    <p class="text-muted">This will permanently remove your vendor account and your login. You will not be able to access the vendor portal with this email again.</p>
+    <ul class="mb-3">
+      <li>Your shop profile and inventory will be removed.</li>
+      <li>Orders you were handling will be unassigned (no longer linked to you).</li>
+      <li>You can register again later as a new vendor if you wish.</li>
+    </ul>
+    <form method="post" onsubmit="return confirm('Are you sure you want to delete your account? This cannot be undone.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label class="d-flex align-items-center">
+          <input type="checkbox" name="confirm" value="yes" class="mr-2" required>
+          I understand and want to delete my vendor account permanently.
+        </label>
+      </div>
+      <button type="submit" class="btn btn-danger">Delete my account</button>
+      <a href="{{ url_for('vendor.profile') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

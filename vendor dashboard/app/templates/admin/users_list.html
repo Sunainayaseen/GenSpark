@@ -1,0 +1,40 @@
+{% extends "admin/base_admin.html" %}
+{% block page_title %}Users{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Users</li>{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h3 class="card-title mb-0">All Users</h3>
+    <a href="{{ url_for('admin.user_add') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus mr-1"></i>Add User</a>
+  </div>
+  <div class="card-body table-responsive p-0">
+    <table class="table table-hover text-nowrap">
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.id }}</td>
+          <td>{{ u.name }}</td>
+          <td>{{ u.email }}</td>
+          <td><span class="badge badge-info">{{ u.role_ref.name if u.role_ref else '-' }}</span></td>
+          <td><span class="badge badge-{{ 'success' if u.status == 'active' else 'danger' }}">{{ u.status }}</span></td>
+          <td>
+            <form action="{{ url_for('admin.user_toggle_status', user_id=u.id) }}" method="post" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-{{ 'danger' if u.status == 'active' else 'success' }}">
+                {{ 'Block' if u.status == 'active' else 'Unblock' }}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center">No users.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
