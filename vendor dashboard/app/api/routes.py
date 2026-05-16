@@ -1008,10 +1008,15 @@ def ping():
 
 
 # ---------- React App.jsx calls this on load – 404 fix ----------
-@api_bp.route('/message', methods=['GET'])
+@api_bp.route('/message', methods=['GET', 'OPTIONS'])
 def get_message():
     """GET /api/message - React app health / welcome message"""
-    return jsonify({'message': 'Hello from GenSpark Flask API!'})
+    if request.method == 'OPTIONS':
+        return make_response('', 204)
+    return jsonify({
+        'success': True,
+        'message': 'Hello from GenSpark Flask API!',
+    })
 
 
 # ---------- Login (session + JWT) ----------

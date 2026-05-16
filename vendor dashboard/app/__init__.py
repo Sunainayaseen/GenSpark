@@ -1,5 +1,8 @@
 # GenSpark - Flask Application Factory
+import os
+
 from flask import Flask, request, make_response, jsonify, redirect, url_for
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_bcrypt import Bcrypt
@@ -7,6 +10,27 @@ from flask_wtf.csrf import CSRFProtect
 from flask_jwt_extended import JWTManager
 from sqlalchemy import text
 from config import config
+
+# React (Vite) + Vercel production — extend via GENSPARK_CORS_ORIGINS=comma,separated,urls
+DEFAULT_CORS_ORIGINS = [
+    'https://genspark-frontend.vercel.app',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]
+
+
+def _cors_origins():
+    origins = list(DEFAULT_CORS_ORIGINS)
+    extra = os.getenv('GENSPARK_CORS_ORIGINS', '')
+    for item in extra.split(','):
+        item = item.strip()
+        if item and item not in origins:
+            origins.append(item)
+    return origins
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
@@ -19,26 +43,13 @@ def create_app(config_name='default'):
     app = Flask(__name__)
     app.config.from_object(config[config_name])
 
-    # CORS: allow React from localhost ya LAN IP (e.g. 192.168.x.x:5178)
-    def _is_allowed_origin(origin):
-        if not origin:
-            return False
-        return (
-            origin.startswith('http://localhost:') or
-            origin.startswith('http://127.0.0.1:') or
-            origin.startswith('http://192.168.') or
-            origin.startswith('http://10.')
-        )
-
-    @app.after_request
-    def _cors_after_request(response):
-        origin = request.environ.get('HTTP_ORIGIN')
-        if _is_allowed_origin(origin):
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        return response
+    CORS(
+        app,
+        supports_credentials=True,
+        origins=_cors_origins(),
+        allow_headers=['Content-Type', 'Authorization', 'X-GenSpark-Model-Reload-Key'],
+        methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    )
 
     db.init_app(app)
     bcrypt.init_app(app)
@@ -191,6 +202,12 @@ def create_app(config_name='default'):
 
     @app.errorhandler(404)
     def not_found(e):
+        if request.path.startswith('/api'):
+            return jsonify({
+                'success': False,
+                'error': 'Not found',
+                'path': request.path,
+            }), 404
         from flask import make_response
         html = (
             '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Not found</title></head><body style="font-family:sans-serif;padding:2rem;max-width:560px;">'
