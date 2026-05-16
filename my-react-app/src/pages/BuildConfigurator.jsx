@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useCart } from '../context/CartContext';
 import { dashboardGet } from '../api/dashboardApi';
-import { getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
+import { getApiUrl, getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
 import { allocateMissingLinePricesFromPackage } from '../data/prebuiltShowcase';
 import './BuildConfigurator.css';
 
@@ -110,13 +110,11 @@ const BuildConfigurator = () => {
       setDbLoading(true);
       setDbError('');
       try {
-        const base = getFlaskBase() || getFlaskBaseFallback();
-        if (!base) throw new Error('Flask base URL not configured.');
-
-        const url = `${base}/api/components/search?q=${encodeURIComponent(query.trim())}&limit=50`;
+        const url = `${getApiUrl('/components/search')}?q=${encodeURIComponent(query.trim())}&limit=50`;
         const res = await fetch(url, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           signal: controller.signal,
         });
         const data = await res.json();

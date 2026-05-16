@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
+import { getApiUrl, getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
 import { SITE_LOGO_SRC } from '../branding';
 import './AuthModal.css';
 
@@ -72,9 +72,7 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
       if (!formData.name || !formData.email) {
         throw new Error('Name and email are required.');
       }
-      const base = getFlaskBase() || getFlaskBaseFallback();
-      const registerUrl = base ? `${base.replace(/\/$/, '')}/api/register` : '/api/register';
-      const res = await fetch(registerUrl, {
+      const res = await fetch(getApiUrl('/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -343,10 +341,8 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
               className="social-btn social-btn-icon google"
               onClick={() => {
                 const base = getFlaskBase() || getFlaskBaseFallback();
-                if (base) {
-                  setFlaskBaseUsed(base);
-                  window.location.href = `${base}/api/auth/google`;
-                }
+                if (base) setFlaskBaseUsed(base);
+                window.location.href = getApiUrl('/auth/google');
               }}
               title="Continue with Google"
               aria-label="Continue with Google"
@@ -363,10 +359,8 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
               className="social-btn social-btn-icon github"
               onClick={() => {
                 const base = getFlaskBase() || getFlaskBaseFallback();
-                if (base) {
-                  setFlaskBaseUsed(base);
-                  window.location.href = `${base}/api/auth/github`;
-                }
+                if (base) setFlaskBaseUsed(base);
+                window.location.href = getApiUrl('/auth/github');
               }}
               title="Continue with GitHub"
               aria-label="Continue with GitHub"

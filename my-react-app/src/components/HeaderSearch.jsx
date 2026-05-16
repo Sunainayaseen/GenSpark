@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
+import { getApiUrl, getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
 
 /**
  * Same component search UI as the site header (icon → pill → live results → configurator).
@@ -94,16 +94,10 @@ export default function HeaderSearch({ onAfterNavigate }) {
     setSearchLiveLoading(true);
     setSearchLiveError('');
     const t = setTimeout(async () => {
-      const base = getFlaskBase() || getFlaskBaseFallback();
-      if (!base) {
-        setSearchLiveLoading(false);
-        setSearchLiveError('Flask server nahi chal raha (port 5000).');
-        setSearchLiveResults([]);
-        return;
-      }
       try {
         const res = await fetch(
-          `${base}/api/components/search?q=${encodeURIComponent(q)}&limit=${LIVE_SEARCH_LIMIT}`
+          `${getApiUrl('/components/search')}?q=${encodeURIComponent(q)}&limit=${LIVE_SEARCH_LIMIT}`,
+          { credentials: 'include' }
         );
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) {

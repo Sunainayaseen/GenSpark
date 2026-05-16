@@ -3,14 +3,9 @@
  * Requires session cookies (login via site auth).
  */
 
-const getBase = () => {
-  if (import.meta.env.VITE_API_BASE) {
-    return import.meta.env.VITE_API_BASE.replace(/\/$/, '');
-  }
-  return '';
-};
+import { getApiPrefix } from '../utils/flaskBase';
 
-const API = `${getBase() || ''}/api/ecom`;
+const API = `${getApiPrefix()}/ecom`;
 
 async function ecomRequest(path, options = {}) {
   const url = `${API}${path.startsWith('/') ? path : `/${path}`}`;

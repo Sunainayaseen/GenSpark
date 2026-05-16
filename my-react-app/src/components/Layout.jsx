@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { getFlaskApiLoginUrl, getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
+import { getApiUrl, getFlaskApiLoginUrl, getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
 import HeaderSearch from './HeaderSearch';
 import AuthModal from './AuthModal';
 import CartDropdown from './CartDropdown';
@@ -93,9 +93,7 @@ const Layout = ({ children }) => {
       return;
     }
     if (oauth !== 'google' && oauth !== 'github') return;
-    const base = getFlaskBase() || getFlaskBaseFallback();
-    if (!base) return;
-    fetch(`${base}/api/me`, { credentials: 'include' })
+    fetch(getApiUrl('/me'), { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.user) {

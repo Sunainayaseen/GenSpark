@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
+import { getApiUrl, getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
 import { dashboardGet } from '../api/dashboardApi';
 import { useCart } from '../context/CartContext';
 import {
@@ -227,11 +227,9 @@ export default function Components() {
     }
     setVendorLoadingId(componentId);
     try {
-      const base = getFlaskBase() || getFlaskBaseFallback();
-      const url = base
-        ? `${base}/api/components/${componentId}/vendors`
-        : `/api/components/${componentId}/vendors`;
-      const res = await fetch(url, { credentials: 'include' });
+      const res = await fetch(getApiUrl(`/components/${componentId}/vendors`), {
+        credentials: 'include',
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Could not load vendors');

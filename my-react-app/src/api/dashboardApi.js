@@ -2,18 +2,12 @@
  * API client for Python dashboard backend.
  *
  * In development: Vite proxies /api to your Python server (see vite.config.js).
- * In production: set VITE_API_BASE or use same-origin (e.g. reverse proxy).
+ * In production: VITE_API_BASE → Railway (see .env.production).
  */
 
-const getBaseUrl = () => {
-  if (import.meta.env.VITE_API_BASE) {
-    return import.meta.env.VITE_API_BASE.replace(/\/$/, '');
-  }
-  return ''; // same origin → use Vite proxy path /api in dev
-};
+import { getApiPrefix } from '../utils/flaskBase';
 
-const API_BASE = getBaseUrl();
-const API_PREFIX = API_BASE || '/api';
+const API_PREFIX = getApiPrefix();
 
 async function request(endpoint, options = {}) {
   const url = `${API_PREFIX}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;

@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 
 import chatbotHeaderLogo from '../assets/genspark-gs-circuit-logo.png';
 import ImageDetectOverlay from '../components/ImageDetectOverlay';
+import { getApiUrl } from '../utils/flaskBase';
 
 import './Chatbot.css';
 
@@ -15,7 +16,7 @@ const postDetectComponent = async (file, options = {}) => {
     formData.append('conf', String(options.confidence));
   }
 
-  const response = await fetch('/api/detect/component', {
+  const response = await fetch(getApiUrl('/detect/component'), {
     method: 'POST',
     body: formData,
   });

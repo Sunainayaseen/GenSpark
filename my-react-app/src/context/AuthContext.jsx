@@ -1,16 +1,10 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { getApiUrl } from '../utils/flaskBase';
 
 const AUTH_KEY = 'genspark_auth';
 
 async function fetchSessionUser() {
-  const getBase = () => {
-    if (import.meta.env.VITE_API_BASE) {
-      return import.meta.env.VITE_API_BASE.replace(/\/$/, '');
-    }
-    return '';
-  };
-  const prefix = getBase() || '/api';
-  const res = await fetch(`${prefix}/me`, { credentials: 'include' });
+  const res = await fetch(getApiUrl('/me'), { credentials: 'include' });
   if (!res.ok) return null;
   const data = await res.json().catch(() => null);
   if (!data?.success || !data.user) return null;

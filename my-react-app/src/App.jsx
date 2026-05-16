@@ -8,7 +8,7 @@ import { CartProvider } from "./context/CartContext";
 
 import { initScrollAnimations } from "./utils/scrollAnimations";
 import { initParallax } from "./utils/parallax";
-import { getFlaskBase } from "./utils/flaskBase";
+import { getApiUrl } from "./utils/flaskBase";
 
 import Landing from "./pages/Landing";
 const Chatbot = lazy(() => import("./pages/Chatbot"));
@@ -120,10 +120,8 @@ function App() {
     const parallaxCleanup = initParallax();
 
     const fetchApi = async () => {
-      const base = getFlaskBase();
-      if (!base) return;
       try {
-        const response = await axios.get(`${base}/api/message`);
+        const response = await axios.get(getApiUrl('/message'));
         if (response.data?.message) console.log(response.data.message);
       } catch (error) {
         console.error(error);

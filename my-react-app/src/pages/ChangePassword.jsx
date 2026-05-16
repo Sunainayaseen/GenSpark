@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
+import { getApiUrl, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
 import './ChangePassword.css';
 
 /**
@@ -34,8 +34,6 @@ export default function ChangePassword() {
       return;
     }
     setLoading(true);
-    const url = getFlaskBase() ? `${getFlaskBase()}/api/change-password` : null;
-    let apiUrl = url || '/api/change-password';
     const opts = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -46,11 +44,11 @@ export default function ChangePassword() {
       credentials: 'include',
     };
     try {
-      let res = await fetch(apiUrl, opts);
+      let res = await fetch(getApiUrl('/change-password'), opts);
       if (!res.ok) {
         const fallback = getFlaskBaseFallback();
-        if (fallback && (!url || url !== `${fallback}/api/change-password`)) {
-          res = await fetch(`${fallback}/api/change-password`, opts);
+        if (fallback) {
+          res = await fetch(`${fallback.replace(/\/$/, '')}/api/change-password`, opts);
           setFlaskBaseUsed(fallback);
         }
       }
