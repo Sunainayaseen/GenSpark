@@ -13,7 +13,13 @@ from app import create_app, db
 # So you know this is GenSpark, not CRUD
 print("(GenSpark) Running from:", _script_dir)
 
-app = create_app(os.getenv('FLASK_ENV', 'development'))
+# Railway sets PORT; treat cloud as production so MySQL env vars are used (not SQLite).
+_config_name = os.getenv('FLASK_ENV', '').strip().lower()
+if not _config_name and os.getenv('RAILWAY_ENVIRONMENT'):
+    _config_name = 'production'
+if not _config_name:
+    _config_name = 'development'
+app = create_app(_config_name)
 
 
 @app.shell_context_processor

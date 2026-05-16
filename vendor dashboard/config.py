@@ -10,6 +10,96 @@ _env_path = Path(__file__).resolve().parent / '.env'
 load_dotenv(_env_path, override=True)
 
 
+def _is_cloud_runtime():
+    """True on Railway / similar PaaS where localhost MySQL does not exist."""
+    return bool(
+        os.getenv('RAILWAY_ENVIRONMENT')
+        or os.getenv('RAILWAY_PROJECT_ID')
+        or os.getenv('RAILWAY_SERVICE_NAME')
+        or os.getenv('RENDER')
+        or os.getenv('FLASK_ENV', '').strip().lower() == 'production'
+    )
+
+
+def _use_sqlite_from_env():
+    """Local dev: SQLite by default. Cloud/production: MySQL unless USE_SQLITE=1."""
+    raw = os.getenv('USE_SQLITE')
+    if raw is not None and str(raw).strip() != '':
+        return str(raw).strip().lower() in ('1', 'true', 'yes')
+    return not _is_cloud_runtime()
+
+
+def _normalize_mysql_url(url: str) -> str:
+    """Ensure SQLAlchemy uses PyMySQL driver."""
+    url = url.strip()
+    if url.startswith('mysql://'):
+        return 'mysql+pymysql://' + url[len('mysql://') :]
+    if url.startswith('mysql+pymysql://'):
+        return url
+    return url
+
+
+def build_sqlalchemy_database_uri():
+    """
+    Build DB URI from environment (Railway Variables, .env, or local defaults).
+
+    Priority:
+      1) DATABASE_URL / MYSQL_URL (full connection string)
+      2) DB_HOST + DB_USER + ... or Railway MYSQLHOST / MYSQLUSER / ...
+      3) localhost defaults (local MySQL only)
+    """
+    if _use_sqlite_from_env():
+        return 'sqlite:///genspark_erp.db'
+
+    for key in ('DATABASE_URL', 'MYSQL_URL', 'MYSQL_PUBLIC_URL'):
+        url = (os.getenv(key) or '').strip()
+        if url:
+            return _normalize_mysql_url(url)
+
+    host = (
+        (os.getenv('DB_HOST') or '').strip()
+        or (os.getenv('MYSQLHOST') or '').strip()
+        or (os.getenv('MYSQL_HOST') or '').strip()
+    )
+    port = (
+        (os.getenv('DB_PORT') or '').strip()
+        or (os.getenv('MYSQLPORT') or '').strip()
+        or (os.getenv('MYSQL_PORT') or '').strip()
+        or '3306'
+    )
+    user = (
+        (os.getenv('DB_USER') or '').strip()
+        or (os.getenv('MYSQLUSER') or '').strip()
+        or (os.getenv('MYSQL_USER') or '').strip()
+        or 'root'
+    )
+    password = (
+        os.getenv('DB_PASSWORD')
+        or os.getenv('MYSQLPASSWORD')
+        or os.getenv('MYSQL_PASSWORD')
+        or ''
+    )
+    password = str(password).strip()
+    name = (
+        (os.getenv('DB_NAME') or '').strip()
+        or (os.getenv('MYSQLDATABASE') or '').strip()
+        or (os.getenv('MYSQL_DATABASE') or '').strip()
+        or 'genspark_erp'
+    )
+
+    if _is_cloud_runtime() and host in ('', 'localhost', '127.0.0.1'):
+        raise RuntimeError(
+            'Database host is localhost on a cloud deploy. Set Railway variables: '
+            'DB_HOST (or MYSQLHOST), DB_USER, DB_PASSWORD, DB_NAME — or DATABASE_URL / MYSQL_URL.'
+        )
+
+    if not host:
+        host = 'localhost'
+
+    safe_password = quote_plus(password)
+    return f'mysql+pymysql://{user}:{safe_password}@{host}:{port}/{name}'
+
+
 class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'genspark-erp-secret-key')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -24,29 +114,14 @@ class Config:
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', MAIL_USERNAME or 'noreply@genspark.com')
     PREFERRED_URL = os.getenv('PREFERRED_URL', 'http://127.0.0.1:5000')
-    # Portal URL for one-time password email (React app); if not set, PREFERRED_URL is used
     FRONTEND_URL = os.getenv('FRONTEND_URL', '')
-    # OAuth – Google & GitHub (leave empty to hide social buttons or skip redirect)
     GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
     GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
     GITHUB_CLIENT_ID = os.getenv('GITHUB_CLIENT_ID', '')
     GITHUB_CLIENT_SECRET = os.getenv('GITHUB_CLIENT_SECRET', '')
 
-    # Database: set USE_SQLITE=1 to run without MySQL (development)
-    USE_SQLITE = os.getenv('USE_SQLITE', '1').strip().lower() in ('1', 'true', 'yes')
-    if USE_SQLITE:
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///genspark_erp.db'
-    else:
-        DB_HOST = os.getenv('DB_HOST', 'localhost') or 'localhost'
-        DB_PORT = os.getenv('DB_PORT', '3306') or '3306'
-        DB_USER = os.getenv('DB_USER', 'root') or 'root'
-        DB_PASSWORD = (os.getenv('DB_PASSWORD') or '').strip()
-        DB_NAME = os.getenv('DB_NAME', 'genspark_erp') or 'genspark_erp'
-        # URL-encode password so special chars like @ don't break the connection string
-        safe_password = quote_plus(DB_PASSWORD)
-        SQLALCHEMY_DATABASE_URI = (
-            f"mysql+pymysql://{DB_USER}:{safe_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        )
+    USE_SQLITE = _use_sqlite_from_env()
+    SQLALCHEMY_DATABASE_URI = build_sqlalchemy_database_uri()
 
 
 class DevelopmentConfig(Config):
@@ -60,5 +135,5 @@ class ProductionConfig(Config):
 config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
-    'default': DevelopmentConfig
+    'default': DevelopmentConfig,
 }
