@@ -1185,8 +1185,8 @@ def api_register():
     verify_url = None
     try:
         token = _generate_email_token(user.email)
-        base = _frontend_url()
-        verify_url = f'{base.rstrip("/")}/api/verify-email?token={token}'
+        from app.utils.urls import get_api_base_url
+        verify_url = f'{get_api_base_url()}/api/verify-email?token={token}'
         send_registration_verification_email(
             to_email=user.email,
             name=user.name,
@@ -1434,8 +1434,8 @@ def auth_github_callback():
 
 
 def _frontend_url():
-    base = current_app.config.get('FRONTEND_URL') or current_app.config.get('PREFERRED_URL', 'http://127.0.0.1:5000')
-    return base.rstrip('/').split('?')[0]
+    from app.utils.urls import get_frontend_url
+    return get_frontend_url()
 
 
 # ---------- Example: POST with validation ----------

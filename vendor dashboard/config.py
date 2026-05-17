@@ -128,7 +128,14 @@ class Config:
     MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', MAIL_USERNAME or 'noreply@genspark.com')
-    PREFERRED_URL = os.getenv('PREFERRED_URL', 'http://127.0.0.1:5000')
+    PREFERRED_URL = (
+        (os.getenv('PREFERRED_URL') or '').strip()
+        or (
+            'https://genspark-production.up.railway.app'
+            if _is_cloud_runtime()
+            else 'http://127.0.0.1:5000'
+        )
+    )
     FRONTEND_URL = os.getenv('FRONTEND_URL', '')
     GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
     GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')

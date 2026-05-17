@@ -4,6 +4,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import current_app
 
+from app.utils.urls import get_api_base_url, get_frontend_url
+
 
 def send_email(to_email, subject, body_text, body_html=None):
     """Send email if MAIL_SERVER is configured. Otherwise no-op."""
@@ -43,7 +45,7 @@ def send_vendor_approval_email(vendor):
     name = vendor.user.name or 'Vendor'
     shop = vendor.shop_name or 'Your shop'
     subject = 'GenSpark – Vendor Account Approved'
-    base = current_app.config.get('PREFERRED_URL', 'http://127.0.0.1:5000')
+    base = get_api_base_url()
     text = f"""Dear {name},
 
 We are pleased to inform you that your vendor account for "{shop}" has been approved by our administration team.
@@ -72,7 +74,7 @@ def send_one_time_password_email(to_email, name, one_time_password, role_type='u
     """Email user/vendor their one-time password; ask them to login and change password.
     role_type: 'user' or 'vendor'
     """
-    portal_url = current_app.config.get('FRONTEND_URL') or current_app.config.get('PREFERRED_URL', 'http://127.0.0.1:5000')
+    portal_url = get_frontend_url()
     role_label = 'Vendor' if role_type == 'vendor' else 'User'
     subject = f'GenSpark – Your {role_label} Account and One-Time Password'
     text = f"""Dear {name or 'User'},
