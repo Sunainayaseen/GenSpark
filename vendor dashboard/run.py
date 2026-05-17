@@ -1,29 +1,38 @@
-# GenSpark - Application Entry Point (NOT CRUD - ye vendor dashboard hai)
+# GenSpark - Application Entry Point (WSGI: gunicorn run:app)
 import os
 import sys
 
-# Always run from this script's folder (vendor dashboard) so "app" and "config" are found
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(_script_dir)
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
-from app import create_app, db
 
-# So you know this is GenSpark, not CRUD
-print("(GenSpark) Running from:", _script_dir)
+def resolve_config_name():
+    """Pick config profile: production on Railway, development locally."""
+    name = os.getenv('FLASK_ENV', '').strip().lower()
+    if name in ('production', 'development'):
+        return name
+    if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_PROJECT_ID'):
+        return 'production'
+    return 'development'
 
-# Railway sets PORT; treat cloud as production so MySQL env vars are used (not SQLite).
-_config_name = os.getenv('FLASK_ENV', '').strip().lower()
-if not _config_name and os.getenv('RAILWAY_ENVIRONMENT'):
-    _config_name = 'production'
-if not _config_name:
-    _config_name = 'development'
-app = create_app(_config_name)
+
+def create_application():
+    from app import create_app
+    return create_app(resolve_config_name())
+
+
+# Gunicorn / railpack entry: gunicorn run:app
+app = create_application()
+
+# Some platforms look for `application`
+application = app
 
 
 @app.shell_context_processor
 def make_shell_context():
+    from app import db
     from app.models import (
         User, Role, Vendor, Component, ComponentCategory,
         PcBuild, BuildComponent, Order, OrderItem, Payment, Shipment
@@ -38,4 +47,14 @@ def make_shell_context():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    config_name = resolve_config_name()
+    port = int(os.getenv('PORT', '5000'))
+    debug = config_name == 'development'
+    print(f'(GenSpark) Running from: {_script_dir}')
+    print(f'(GenSpark) config={config_name} port={port} debug={debug}')
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=debug,
+        use_reloader=debug,
+    )

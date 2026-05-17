@@ -9,7 +9,7 @@ from flask_bcrypt import Bcrypt
 from flask_wtf.csrf import CSRFProtect
 from flask_jwt_extended import JWTManager
 from sqlalchemy import text
-from config import config
+from config import config, build_sqlalchemy_database_uri, _use_sqlite_from_env
 
 # React (Vite) + Vercel production — extend via GENSPARK_CORS_ORIGINS=comma,separated,urls
 DEFAULT_CORS_ORIGINS = [
@@ -42,6 +42,9 @@ jwt = JWTManager()
 def create_app(config_name='default'):
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+    # Resolve DB after env is loaded (never at config.py import — breaks Railway build)
+    app.config['USE_SQLITE'] = _use_sqlite_from_env()
+    app.config['SQLALCHEMY_DATABASE_URI'] = build_sqlalchemy_database_uri()
 
     CORS(
         app,

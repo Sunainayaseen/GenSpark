@@ -4,10 +4,8 @@ from pathlib import Path
 from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
-# .env hamesha "vendor dashboard" folder se load karo (chaho jahan se run karo)
-# override=True so .env values win over empty system env (fixes "using password: NO")
+# .env is loaded from this folder only (not cwd-dependent).
 _env_path = Path(__file__).resolve().parent / '.env'
-load_dotenv(_env_path, override=True)
 
 
 def _is_cloud_runtime():
@@ -17,8 +15,21 @@ def _is_cloud_runtime():
         or os.getenv('RAILWAY_PROJECT_ID')
         or os.getenv('RAILWAY_SERVICE_NAME')
         or os.getenv('RENDER')
-        or os.getenv('FLASK_ENV', '').strip().lower() == 'production'
+        or os.getenv('PORT')  # Railway/Heroku always inject PORT
     )
+
+
+def _load_environment():
+    """
+    Load .env for local dev. On cloud, platform variables must win over .env defaults
+    (override=True would replace MYSQLHOST etc. with localhost from a committed .env).
+    """
+    if not _env_path.is_file():
+        return
+    load_dotenv(_env_path, override=not _is_cloud_runtime())
+
+
+_load_environment()
 
 
 def _use_sqlite_from_env():
@@ -26,14 +37,17 @@ def _use_sqlite_from_env():
     raw = os.getenv('USE_SQLITE')
     if raw is not None and str(raw).strip() != '':
         return str(raw).strip().lower() in ('1', 'true', 'yes')
-    return not _is_cloud_runtime()
+    if _is_cloud_runtime():
+        return False
+    # Local: default SQLite unless FLASK_ENV=production explicitly
+    return os.getenv('FLASK_ENV', '').strip().lower() != 'production'
 
 
 def _normalize_mysql_url(url: str) -> str:
     """Ensure SQLAlchemy uses PyMySQL driver."""
     url = url.strip()
     if url.startswith('mysql://'):
-        return 'mysql+pymysql://' + url[len('mysql://') :]
+        return 'mysql+pymysql://' + url[len('mysql://'):]
     if url.startswith('mysql+pymysql://'):
         return url
     return url
@@ -89,8 +103,9 @@ def build_sqlalchemy_database_uri():
 
     if _is_cloud_runtime() and host in ('', 'localhost', '127.0.0.1'):
         raise RuntimeError(
-            'Database host is localhost on a cloud deploy. Set Railway variables: '
-            'DB_HOST (or MYSQLHOST), DB_USER, DB_PASSWORD, DB_NAME — or DATABASE_URL / MYSQL_URL.'
+            'Database host is localhost on a cloud deploy. Link MySQL on Railway or set: '
+            'DATABASE_URL / MYSQL_URL, or DB_HOST + DB_USER + DB_PASSWORD + DB_NAME '
+            '(Railway plugin: MYSQLHOST, MYSQLUSER, MYSQLPASSWORD, MYSQLDATABASE).'
         )
 
     if not host:
@@ -120,8 +135,8 @@ class Config:
     GITHUB_CLIENT_ID = os.getenv('GITHUB_CLIENT_ID', '')
     GITHUB_CLIENT_SECRET = os.getenv('GITHUB_CLIENT_SECRET', '')
 
-    USE_SQLITE = _use_sqlite_from_env()
-    SQLALCHEMY_DATABASE_URI = build_sqlalchemy_database_uri()
+    # Do NOT call build_sqlalchemy_database_uri() here — that runs at import time and
+    # crashes railpack/gunicorn before run.py loads. Set in create_app() instead.
 
 
 class DevelopmentConfig(Config):
