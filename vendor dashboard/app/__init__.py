@@ -98,79 +98,13 @@ def create_app(config_name='default'):
     csrf.exempt(api_bp)
     csrf.exempt(ecom_bp)
 
-    # Lightweight DB schema guardrails for older databases (no Alembic here).
-    # Fixes MySQL installs where cart_items.product_id was created NOT NULL.
+    # Fresh Railway MySQL: create_all + seed first; ALTER only if tables already exist.
+    from app.utils.schema import ensure_database_schema, apply_legacy_migrations
     try:
-        with app.app_context():
-            if db.engine.dialect.name == 'mysql':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text(
-                        "SELECT IS_NULLABLE, COLUMN_TYPE "
-                        "FROM INFORMATION_SCHEMA.COLUMNS "
-                        "WHERE TABLE_SCHEMA = DATABASE() "
-                        "AND TABLE_NAME = 'cart_items' "
-                        "AND COLUMN_NAME = 'product_id'"
-                    )).fetchone()
-                    if r and str(r[0]).upper() == 'NO':
-                        # Keep same type, only relax nullability.
-                        col_type = r[1] or 'INT'
-                        conn.execute(text(f"ALTER TABLE cart_items MODIFY product_id {col_type} NULL"))
-                        conn.commit()
+        ensure_database_schema(app)
+        apply_legacy_migrations(app)
     except Exception as e:
-        # Non-fatal: app can still run; cart may error until DB is fixed.
-        print('Note: cart_items.product_id nullability migration skipped:', e)
-
-    try:
-        with app.app_context():
-            if db.engine.dialect.name == 'mysql':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text(
-                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
-                        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vendor_orders' "
-                        "AND COLUMN_NAME = 'proof_approved'"
-                    )).fetchone()
-                    if not r:
-                        conn.execute(text(
-                            "ALTER TABLE vendor_orders ADD COLUMN proof_approved TINYINT(1) NOT NULL DEFAULT 1"
-                        ))
-                        conn.commit()
-            elif db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(vendor_orders)"))
-                    cols = [row[1] for row in r]
-                    if 'proof_approved' not in cols:
-                        conn.execute(text(
-                            "ALTER TABLE vendor_orders ADD COLUMN proof_approved BOOLEAN NOT NULL DEFAULT 1"
-                        ))
-                        conn.commit()
-    except Exception as e:
-        print('Note: vendor_orders.proof_approved migration skipped:', e)
-
-    try:
-        with app.app_context():
-            if db.engine.dialect.name == 'mysql':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text(
-                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
-                        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' "
-                        "AND COLUMN_NAME = 'shipping_fee'"
-                    )).fetchone()
-                    if not r:
-                        conn.execute(text(
-                            "ALTER TABLE orders ADD COLUMN shipping_fee DECIMAL(12,2) NOT NULL DEFAULT 0"
-                        ))
-                        conn.commit()
-            elif db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(orders)"))
-                    cols = [row[1] for row in r]
-                    if 'shipping_fee' not in cols:
-                        conn.execute(text(
-                            "ALTER TABLE orders ADD COLUMN shipping_fee NUMERIC(12,2) NOT NULL DEFAULT 0"
-                        ))
-                        conn.commit()
-    except Exception as e:
-        print('Note: orders.shipping_fee migration skipped:', e)
+        print('Note: database schema bootstrap skipped:', e)
 
     @app.route('/health')
     def health():
