@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getApiUrl, getFlaskBase, getFlaskBaseFallback, normalizeBackendUrl, setFlaskBaseUsed } from '../utils/flaskBase';
+import { getApiUrl, getFlaskBase, getFlaskBaseFallback, normalizeVerificationUrl, setFlaskBaseUsed } from '../utils/flaskBase';
 import { SITE_LOGO_SRC } from '../branding';
 import './AuthModal.css';
 
@@ -87,7 +87,11 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
         throw new Error(data.error || data.message || 'Registration failed');
       }
       const otp = data.one_time_password;
-      const verificationUrl = normalizeBackendUrl(data.verification_url);
+      const rawVerificationUrl =
+        typeof data.verification_url === 'string' ? data.verification_url : '';
+      const verificationUrl = rawVerificationUrl
+        ? normalizeVerificationUrl(rawVerificationUrl)
+        : null;
       setRegistrationSuccess({ otp, verificationUrl });
       setFormData({
         name: '',
@@ -146,12 +150,23 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
               <div className="auth-success-block">
                 <label>Verification link (for testing)</label>
                 <div className="auth-success-copy-row">
-                  <code className="auth-success-code auth-success-link">{registrationSuccess.verificationUrl}</code>
+                  <code
+                    className="auth-success-code auth-success-link"
+                    title={registrationSuccess.verificationUrl}
+                  >
+                    {registrationSuccess.verificationUrl}
+                  </code>
                   <button type="button" className="auth-success-copy-btn" data-copy="link" onClick={() => copyToClipboard(registrationSuccess.verificationUrl, 'link')}>
                     Copy
                   </button>
                 </div>
-                <a href={registrationSuccess.verificationUrl} target="_blank" rel="noopener noreferrer" className="auth-success-open-link">
+                <a
+                  href={registrationSuccess.verificationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="auth-success-open-link"
+                  title={registrationSuccess.verificationUrl}
+                >
                   Open verification link
                 </a>
               </div>

@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { useCart } from '../context/CartContext';
 import { dashboardGet } from '../api/dashboardApi';
 import { getApiUrl, getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
+import { getAuthHeaders } from '../utils/authStorage';
 import { allocateMissingLinePricesFromPackage } from '../data/prebuiltShowcase';
 import './BuildConfigurator.css';
 
@@ -113,7 +114,7 @@ const BuildConfigurator = () => {
         const url = `${getApiUrl('/components/search')}?q=${encodeURIComponent(query.trim())}&limit=50`;
         const res = await fetch(url, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           credentials: 'include',
           signal: controller.signal,
         });

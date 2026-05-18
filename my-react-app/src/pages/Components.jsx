@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getApiUrl, getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
+import { getAuthHeaders } from '../utils/authStorage';
 import { dashboardGet } from '../api/dashboardApi';
 import { useCart } from '../context/CartContext';
 import {
@@ -229,6 +230,7 @@ export default function Components() {
     try {
       const res = await fetch(getApiUrl(`/components/${componentId}/vendors`), {
         credentials: 'include',
+        headers: getAuthHeaders(),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {

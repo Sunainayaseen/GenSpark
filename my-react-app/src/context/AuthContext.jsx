@@ -1,17 +1,45 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { getApiUrl } from '../utils/flaskBase';
-
-const AUTH_KEY = 'genspark_auth';
-
-async function fetchSessionUser() {
-  const res = await fetch(getApiUrl('/me'), { credentials: 'include' });
-  if (!res.ok) return null;
-  const data = await res.json().catch(() => null);
-  if (!data?.success || !data.user) return null;
-  return data.user;
-}
+import {
+  loadAuthSession,
+  saveAuthSession,
+  clearAuthSession,
+  getAuthHeaders,
+} from '../utils/authStorage';
 
 const AuthContext = createContext();
+
+function normalizeUser(raw) {
+  if (!raw?.email) return null;
+  return {
+    id: raw.id,
+    name: raw.name || raw.email.split('@')[0],
+    email: raw.email,
+    role: raw.role || 'customer',
+    must_change_password: Boolean(raw.must_change_password),
+  };
+}
+
+/**
+ * Validate session with backend. Returns user, false if token invalid, null if network/skip.
+ */
+async function fetchSessionUser(token) {
+  const headers = getAuthHeaders();
+  try {
+    const res = await fetch(getApiUrl('/me'), {
+      credentials: 'include',
+      headers,
+    });
+    const data = await res.json().catch(() => null);
+    if (data?.success && data.user) {
+      return normalizeUser(data.user);
+    }
+    if (token) return false;
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
@@ -19,90 +47,81 @@ export const useAuth = () => {
   return ctx;
 };
 
-const loadStored = () => {
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (_) {}
-  return null;
-};
-
-const saveStored = (data) => {
-  try {
-    if (data) localStorage.setItem(AUTH_KEY, JSON.stringify(data));
-    else localStorage.removeItem(AUTH_KEY);
-  } catch (_) {}
-};
-
 export const AuthProvider = ({ children }) => {
-  const [user, setUserState] = useState(loadStored);
+  const initial = loadAuthSession();
+  const [user, setUserState] = useState(() => normalizeUser(initial.user));
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const stored = loadStored();
-      if (!stored?.email) return;
-      const serverUser = await fetchSessionUser();
-      if (cancelled) return;
-      if (!serverUser) {
-        setUserState(null);
-        saveStored(null);
+      const { user: storedUser, token } = loadAuthSession();
+      if (!storedUser?.email) {
+        if (!cancelled) setAuthReady(true);
         return;
       }
-      setUserState({
-        id: serverUser.id,
-        name: serverUser.name,
-        email: serverUser.email,
-        role: serverUser.role || 'customer',
-        must_change_password: Boolean(serverUser.must_change_password),
-      });
+
+      if (!token) {
+        if (!cancelled) setAuthReady(true);
+        return;
+      }
+
+      const serverUser = await fetchSessionUser(token);
+      if (cancelled) return;
+
+      if (serverUser) {
+        setUserState(serverUser);
+        saveAuthSession(serverUser, token);
+      } else if (serverUser === false) {
+        setUserState(null);
+        clearAuthSession();
+      }
+      setAuthReady(true);
     })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  useEffect(() => {
-    saveStored(user);
-  }, [user]);
-
-  /** Login with user object from API (id, name, email, role, must_change_password) or legacy. */
+  /** Login with API user (+ optional JWT token) or legacy email/password mock. */
   const login = (userOrEmail, passwordOrNull, role = 'buyer') => {
     if (userOrEmail && typeof userOrEmail === 'object' && userOrEmail.email) {
-      setUserState({
-        id: userOrEmail.id,
-        name: userOrEmail.name || userOrEmail.email.split('@')[0],
-        email: userOrEmail.email,
-        role: userOrEmail.role || 'customer',
-        must_change_password: Boolean(userOrEmail.must_change_password),
-      });
-    } else {
-      setUserState({
-        email: userOrEmail,
-        name: String(userOrEmail).split('@')[0],
-        role: role || 'buyer',
-        id: Date.now().toString(),
-      });
+      const { token, ...rest } = userOrEmail;
+      const normalized = normalizeUser(rest);
+      setUserState(normalized);
+      saveAuthSession(normalized, token || null);
+      return;
     }
+    const normalized = normalizeUser({
+      email: userOrEmail,
+      name: String(userOrEmail).split('@')[0],
+      role: role || 'buyer',
+      id: Date.now().toString(),
+    });
+    setUserState(normalized);
+    saveAuthSession(normalized, null);
   };
 
   const signup = (name, email, password, role = 'buyer') => {
-    setUserState({
-      email,
-      name: name || email.split('@')[0],
-      role,
-      id: Date.now().toString(),
+    login({ name, email, role: role || 'buyer', id: Date.now().toString() });
+  };
+
+  const logout = () => {
+    setUserState(null);
+    clearAuthSession();
+  };
+
+  const updateUser = (partial) => {
+    setUserState((prev) => {
+      if (!prev) return null;
+      const next = { ...prev, ...partial };
+      const { token } = loadAuthSession();
+      saveAuthSession(next, token);
+      return next;
     });
   };
 
-  const logout = () => setUserState(null);
-
-  /** Update user in state (e.g. after password change: clear must_change_password). */
-  const updateUser = (partial) => {
-    setUserState((prev) => (prev ? { ...prev, ...partial } : null));
-  };
-
-  const isBuyer = user?.role === 'buyer';
+  const isBuyer = user?.role === 'buyer' || user?.role === 'customer';
   const isVendor = user?.role === 'vendor';
   const isAdmin = user?.role === 'admin';
 
@@ -114,6 +133,7 @@ export const AuthProvider = ({ children }) => {
         signup,
         logout,
         updateUser,
+        authReady,
         isBuyer,
         isVendor,
         isAdmin,

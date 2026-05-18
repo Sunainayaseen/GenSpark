@@ -836,6 +836,12 @@
 
 .auth-success-code.auth-success-link {
   font-size: 0.75rem;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+  word-break: normal;
+  -webkit-overflow-scrolling: touch;
 }
 
 .auth-success-copy-btn {

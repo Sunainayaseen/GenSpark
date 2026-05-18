@@ -15,12 +15,36 @@ export function getApiBase() {
 }
 
 /**
- * Rewrites localhost API links from the backend to the configured production base.
- * Used for email verification URLs returned by POST /api/register.
+ * Rewrites localhost API links to the live API base without altering path or query
+ * (preserves the full email verification token in ?token=...).
  */
+export function normalizeVerificationUrl(rawUrl) {
+  if (rawUrl == null) return rawUrl;
+  const url = String(rawUrl).trim();
+  if (!url) return url;
+
+  const apiBase = getApiBase();
+
+  try {
+    const parsed = new URL(url);
+    const isLocal =
+      /^https?:\/\/(?:127\.0\.0\.1|localhost):5000$/i.test(parsed.origin);
+    if (isLocal) {
+      return `${apiBase}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+    return parsed.href;
+  } catch (_) {
+    if (url.startsWith('/')) {
+      return `${apiBase}${url}`;
+    }
+  }
+
+  return url.replace(LOCAL_API_PATTERN, apiBase);
+}
+
+/** @deprecated Use normalizeVerificationUrl — same behavior. */
 export function normalizeBackendUrl(url) {
-  if (!url || typeof url !== 'string') return url;
-  return url.replace(LOCAL_API_PATTERN, getApiBase());
+  return normalizeVerificationUrl(url);
 }
 
 /** Prefix for REST JSON routes, e.g. https://genspark-production.up.railway.app/api */

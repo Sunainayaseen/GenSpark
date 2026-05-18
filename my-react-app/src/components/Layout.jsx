@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getApiUrl, getFlaskApiLoginUrl, getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
+import { getAuthHeaders } from '../utils/authStorage';
 import HeaderSearch from './HeaderSearch';
 import AuthModal from './AuthModal';
 import CartDropdown from './CartDropdown';
@@ -93,7 +94,7 @@ const Layout = ({ children }) => {
       return;
     }
     if (oauth !== 'google' && oauth !== 'github') return;
-    fetch(getApiUrl('/me'), { credentials: 'include' })
+    fetch(getApiUrl('/me'), { credentials: 'include', headers: getAuthHeaders() })
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.user) {
@@ -371,7 +372,8 @@ const Layout = ({ children }) => {
           } else if (location.pathname === '/admin') {
             window.dispatchEvent(new CustomEvent('flask-admin-login-success'));
           }
-          return data.user || null;
+          if (!data.user) return null;
+          return data.token ? { ...data.user, token: data.token } : data.user;
         }}
       />
 

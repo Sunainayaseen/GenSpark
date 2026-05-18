@@ -11,7 +11,7 @@ from datetime import datetime
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import jsonify, request, make_response, redirect, session, current_app
 from flask_login import login_user, current_user
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
 from app.api import api_bp
 from app import db
@@ -1114,13 +1114,20 @@ def api_admin_login():
 
 # ---------- Change password (first login or user-initiated) ----------
 @api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
+@jwt_required(optional=True)
 def api_change_password():
-    """POST /api/change-password - JSON { current_password, new_password }. Requires logged-in session."""
+    """POST /api/change-password - JSON { current_password, new_password }. Session or JWT Bearer."""
     if request.method == 'OPTIONS':
         r = make_response('', 204)
         r.headers['Access-Control-Max-Age'] = '86400'
         return r
-    if not current_user.is_authenticated:
+    user = None
+    jwt_user_id = get_jwt_identity()
+    if jwt_user_id is not None:
+        user = User.query.get(int(jwt_user_id))
+    elif current_user.is_authenticated:
+        user = User.query.get(current_user.id)
+    if not user:
         return jsonify({'success': False, 'error': 'Login required'}), 401
     data = request.get_json(silent=True) or {}
     current = data.get('current_password') or ''
@@ -1129,7 +1136,6 @@ def api_change_password():
         return jsonify({'success': False, 'error': 'Current and new password required'}), 400
     if len(new_pw) < 6:
         return jsonify({'success': False, 'error': 'New password must be at least 6 characters'}), 400
-    user = User.query.get(current_user.id)
     if not user or not user.check_password(current):
         return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
     user.set_password(new_pw)
@@ -1230,19 +1236,15 @@ def api_verify_email():
 
 # ---------- Current user (for OAuth callback sync on frontend) ----------
 @api_bp.route('/me', methods=['GET'])
+@jwt_required(optional=True)
 def api_me():
-    """GET /api/me - Return current user if logged in (session or JWT)."""
-    # Try session user first (Flask-Login)
-    if current_user.is_authenticated:
+    """GET /api/me - Return current user if logged in (session or JWT Bearer)."""
+    user = None
+    jwt_user_id = get_jwt_identity()
+    if jwt_user_id is not None:
+        user = User.query.get(int(jwt_user_id))
+    elif current_user.is_authenticated:
         user = User.query.get(current_user.id)
-    else:
-        # If JWT present, use that
-        try:
-            claims = get_jwt()
-            user_id = claims.get('sub') or claims.get('identity')
-            user = User.query.get(int(user_id)) if user_id is not None else None
-        except Exception:
-            user = None
     if not user:
         return jsonify({'success': False, 'user': None}), 200
     role_name = user.role_ref.name if getattr(user, 'role_ref', None) else 'customer'

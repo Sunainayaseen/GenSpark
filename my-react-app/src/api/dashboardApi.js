@@ -4,16 +4,17 @@
  */
 
 import { getApiPrefix } from '../utils/flaskBase';
+import { getAuthHeaders } from '../utils/authStorage';
 
 const API_PREFIX = getApiPrefix();
 
 async function request(endpoint, options = {}) {
   const url = `${API_PREFIX}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   const config = {
-    headers: {
+    headers: getAuthHeaders({
       'Content-Type': 'application/json',
       ...options.headers,
-    },
+    }),
     // Needed for Flask session-based carts and auth cookies.
     credentials: 'include',
     ...options,

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getApiUrl, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
+import { getApiUrl } from '../utils/flaskBase';
+import { getStoredToken } from '../utils/authStorage';
 import './ChangePassword.css';
 
 /**
@@ -33,10 +34,19 @@ export default function ChangePassword() {
       setError('New password and confirm do not match.');
       return;
     }
+    const token = getStoredToken();
+    if (!token) {
+      setError('Session expired. Please sign in again, then update your password.');
+      return;
+    }
+
     setLoading(true);
     const opts = {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         current_password: currentPassword,
         new_password: newPassword,
@@ -44,14 +54,7 @@ export default function ChangePassword() {
       credentials: 'include',
     };
     try {
-      let res = await fetch(getApiUrl('/change-password'), opts);
-      if (!res.ok) {
-        const fallback = getFlaskBaseFallback();
-        if (fallback) {
-          res = await fetch(`${fallback.replace(/\/$/, '')}/api/change-password`, opts);
-          setFlaskBaseUsed(fallback);
-        }
-      }
+      const res = await fetch(getApiUrl('/change-password'), opts);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || 'Failed to update password.');

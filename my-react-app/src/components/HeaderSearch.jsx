@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getApiUrl, getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
+import { getAuthHeaders } from '../utils/authStorage';
 
 /**
  * Same component search UI as the site header (icon → pill → live results → configurator).
@@ -97,7 +98,7 @@ export default function HeaderSearch({ onAfterNavigate }) {
       try {
         const res = await fetch(
           `${getApiUrl('/components/search')}?q=${encodeURIComponent(q)}&limit=${LIVE_SEARCH_LIMIT}`,
-          { credentials: 'include' }
+          { credentials: 'include', headers: getAuthHeaders() }
         );
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) {

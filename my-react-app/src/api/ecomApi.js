@@ -4,6 +4,7 @@
  */
 
 import { getApiPrefix } from '../utils/flaskBase';
+import { getAuthHeaders } from '../utils/authStorage';
 
 const API = `${getApiPrefix()}/ecom`;
 
@@ -11,7 +12,7 @@ async function ecomRequest(path, options = {}) {
   const url = `${API}${path.startsWith('/') ? path : `/${path}`}`;
   const res = await fetch(url, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: getAuthHeaders({ 'Content-Type': 'application/json', ...options.headers }),
     ...options,
   });
   const data = await res.json().catch(() => ({}));
