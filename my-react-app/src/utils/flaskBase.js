@@ -1,68 +1,47 @@
 const FLASK_BASE_KEY = 'genspark_flask_base';
 
-/** Production backend (Railway). Overridden by VITE_API_BASE when set. */
+/** Live production API (Railway). Default when VITE_API_BASE is unset. */
 export const RAILWAY_API_BASE = 'https://genspark-production.up.railway.app';
+
+const LOCAL_API_PATTERN = /^https?:\/\/(?:127\.0\.0\.1|localhost):5000/i;
 
 /**
  * API origin for JSON calls (no trailing slash).
- * - VITE_API_BASE from .env (build-time)
- * - Production fallback: Railway URL
- * - Dev on Vite (5173/4173): '' → use relative /api (proxy)
+ * Set VITE_API_BASE in .env / .env.production (see .env.example).
  */
 export function getApiBase() {
   const fromEnv = import.meta.env?.VITE_API_BASE?.replace(/\/$/, '');
-  if (fromEnv) return fromEnv;
-  if (import.meta.env?.PROD) return RAILWAY_API_BASE;
-  return '';
+  return fromEnv || RAILWAY_API_BASE;
 }
 
-/** Prefix for REST JSON routes: `https://host/api` or `/api`. */
+/**
+ * Rewrites localhost API links from the backend to the configured production base.
+ * Used for email verification URLs returned by POST /api/register.
+ */
+export function normalizeBackendUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  return url.replace(LOCAL_API_PATTERN, getApiBase());
+}
+
+/** Prefix for REST JSON routes, e.g. https://genspark-production.up.railway.app/api */
 export function getApiPrefix() {
-  const base = getApiBase();
-  return base ? `${base}/api` : '/api';
+  return `${getApiBase()}/api`;
 }
 
 /** Full URL for an API path, e.g. getApiUrl('/detect/component'). */
 export function getApiUrl(path) {
   const p = path.startsWith('/') ? path : `/${path}`;
-  const prefix = getApiPrefix();
-  if (prefix.startsWith('http')) return `${prefix}${p}`;
-  return `${prefix}${p}`;
+  return `${getApiPrefix()}${p}`;
 }
 
-/**
- * When the React app runs on Vite (5173/4173), all /api calls must be same-origin
- * (proxied) so Flask session cookies are set and sent with fetch(..., credentials).
- */
-function useSameOriginApi() {
-  if (typeof window === 'undefined') return false;
-  if (getApiBase()) return false;
-  const p = window.location.port;
-  return p === '5173' || p === '4173';
-}
-
-/**
- * Flask (run.py) base URL — HTML pages (login iframe, admin, vendor dashboards).
- */
+/** Flask HTML / OAuth base URL (same host as API). */
 export function getFlaskBase() {
-  const configured = getApiBase();
-  if (configured) return configured;
-  if (useSameOriginApi()) return '';
-  if (typeof window !== 'undefined' && window.sessionStorage) {
-    const stored = sessionStorage.getItem(FLASK_BASE_KEY);
-    if (stored) return stored;
-  }
-  const h = typeof window !== 'undefined' ? window.location.hostname : '';
-  if (!h) return '';
-  return `http://${h}:5000`;
+  return getApiBase();
 }
 
-/** Fallback URL jab getFlaskBase() se fetch fail ho (local dev only). */
+/** Same as getFlaskBase — kept for callers that retry on network failure. */
 export function getFlaskBaseFallback() {
-  if (getApiBase()) return null;
-  const h = typeof window !== 'undefined' ? window.location.hostname : '';
-  if (h === 'localhost' || h === '127.0.0.1') return 'http://127.0.0.1:5000';
-  return null;
+  return getApiBase();
 }
 
 export function setFlaskBaseUsed(base) {
@@ -72,18 +51,15 @@ export function setFlaskBaseUsed(base) {
 }
 
 export function getFlaskLoginUrl() {
-  const base = getFlaskBase();
-  return base ? `${base}/auth/login` : '/flask/auth/login';
+  return `${getFlaskBase()}/auth/login`;
 }
 
 export function getFlaskVendorDashboardUrl() {
-  const base = getFlaskBase();
-  return base ? `${base}/vendor/dashboard` : '/flask/vendor/dashboard';
+  return `${getFlaskBase()}/vendor/dashboard`;
 }
 
 export function getFlaskAdminDashboardUrl() {
-  const base = getFlaskBase();
-  return base ? `${base}/admin/dashboard` : '/flask/admin/dashboard';
+  return `${getFlaskBase()}/admin/dashboard`;
 }
 
 export function getFlaskApiLoginUrl() {

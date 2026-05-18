@@ -344,12 +344,12 @@ const Layout = ({ children }) => {
                 setFlaskBaseUsed(fallbackBase);
               } catch (secondErr) {
                 throw new Error(
-                  'Flask reach nahi ho raha. "vendor dashboard" me python run.py chalao (port 5000).'
+                  'Cannot reach the GenSpark API. Check your connection or try again later.'
                 );
               }
             } else {
               throw new Error(
-                'Flask reach nahi ho raha. "vendor dashboard" me python run.py chalao (port 5000).'
+                'Cannot reach the GenSpark API. Check your connection or try again later.'
               );
             }
           }

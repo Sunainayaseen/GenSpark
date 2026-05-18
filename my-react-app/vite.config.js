@@ -6,18 +6,16 @@ export default defineConfig({
   plugins: [react()],
   publicDir: 'public',
   base: '/',
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:5000',
-        changeOrigin: true,
-      },
-      // Flask UI (login, admin, vendor) – same origin se chalega, CORS nahi
-      '/flask': {
-        target: 'http://127.0.0.1:5000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/flask/, ''),
-      },
-    },
-  },
+  // Optional: uncomment proxy if VITE_API_BASE points to local Flask (127.0.0.1:5000).
+  // Default frontend uses Railway via VITE_API_BASE in .env.
+  // server: {
+  //   proxy: {
+  //     '/api': { target: 'http://127.0.0.1:5000', changeOrigin: true },
+  //     '/flask': {
+  //       target: 'http://127.0.0.1:5000',
+  //       changeOrigin: true,
+  //       rewrite: (path) => path.replace(/^\/flask/, ''),
+  //     },
+  //   },
+  // },
 })

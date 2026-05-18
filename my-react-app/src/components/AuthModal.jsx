@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getApiUrl, getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
+import { getApiUrl, getFlaskBase, getFlaskBaseFallback, normalizeBackendUrl, setFlaskBaseUsed } from '../utils/flaskBase';
 import { SITE_LOGO_SRC } from '../branding';
 import './AuthModal.css';
 
@@ -87,7 +87,7 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
         throw new Error(data.error || data.message || 'Registration failed');
       }
       const otp = data.one_time_password;
-      const verificationUrl = data.verification_url;
+      const verificationUrl = normalizeBackendUrl(data.verification_url);
       setRegistrationSuccess({ otp, verificationUrl });
       setFormData({
         name: '',

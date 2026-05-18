@@ -1,8 +1,6 @@
 /**
- * API client for Python dashboard backend.
- *
- * In development: Vite proxies /api to your Python server (see vite.config.js).
- * In production: VITE_API_BASE → Railway (see .env.production).
+ * API client for GenSpark Flask backend on Railway.
+ * Base URL: VITE_API_BASE in .env / .env.production (see src/utils/flaskBase.js).
  */
 
 import { getApiPrefix } from '../utils/flaskBase';
@@ -46,7 +44,7 @@ async function request(endpoint, options = {}) {
       `Request failed (${res.status})`;
     const errMsg =
       res.status === 500 && !fromJson
-        ? `${baseMsg} — Try: "vendor dashboard" folder → python init_db.py → python run.py`
+        ? `${baseMsg} — The GenSpark API may be unavailable; try again later.`
         : baseMsg;
     const err = new Error(errMsg);
     err.status = res.status;

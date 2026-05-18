@@ -186,7 +186,7 @@ export default function Components() {
       const base = getFlaskBase() || getFlaskBaseFallback();
       if (!base) {
         setError(
-          'Backend server is not reachable. Start the Flask app (e.g. port 5000) and ensure the Vite proxy is configured.'
+          'Backend server is not reachable. Ensure the GenSpark API is online at https://genspark-production.up.railway.app'
         );
       } else {
         setError(e.message || 'Could not load components.');
