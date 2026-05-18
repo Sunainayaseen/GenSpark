@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getApiUrl } from '../utils/flaskBase';
@@ -10,7 +10,7 @@ import './ChangePassword.css';
  * User must set a new password; email is shown (readonly).
  */
 export default function ChangePassword() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, authReady } = useAuth();
   const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -18,14 +18,33 @@ export default function ChangePassword() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!user?.email) {
-    navigate('/', { replace: true });
-    return null;
+  useEffect(() => {
+    setError('');
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    setError('');
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (authReady && !user?.email) {
+      navigate('/', { replace: true });
+    }
+  }, [authReady, user?.email, navigate]);
+
+  if (!authReady || !user?.email) {
+    return (
+      <div className="change-password-page change-password-page--loading" aria-busy="true">
+        <p className="change-password-loading">Loading…</p>
+      </div>
+    );
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
     if (newPassword.length < 6) {
       setError('New password must be at least 6 characters.');
       return;
@@ -34,31 +53,30 @@ export default function ChangePassword() {
       setError('New password and confirm do not match.');
       return;
     }
+
     const token = getStoredToken();
     if (!token) {
-      setError('Session expired. Please sign in again, then update your password.');
+      setError('Session expired. Please sign out, sign in again, then update your password.');
       return;
     }
 
     setLoading(true);
-    const opts = {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        current_password: currentPassword,
-        new_password: newPassword,
-      }),
-      credentials: 'include',
-    };
     try {
-      const res = await fetch(getApiUrl('/change-password'), opts);
+      const res = await fetch(getApiUrl('/change-password'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+        credentials: 'include',
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || 'Failed to update password.');
-        setLoading(false);
         return;
       }
       updateUser({ must_change_password: false });
@@ -70,67 +88,88 @@ export default function ChangePassword() {
     }
   };
 
+  const onFieldChange = (setter) => (e) => {
+    setter(e.target.value);
+    if (error) setError('');
+  };
+
   return (
     <div className="change-password-page">
-      <div className="change-password-card">
-        <h1>Change your password</h1>
-        <p className="change-password-subtitle">
-          Your account was created by an admin. Please set a new password for <strong>{user.email}</strong>.
-        </p>
-        <form onSubmit={handleSubmit} className="change-password-form">
-          <div className="form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              value={user.email}
-              readOnly
-              className="form-control readonly"
-              aria-readonly
-            />
-          </div>
-          <div className="form-group">
-            <label>Current password (one-time password from admin)</label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Enter current password"
-              required
-              className="form-control"
-              autoComplete="current-password"
-            />
-          </div>
-          <div className="form-group">
-            <label>New password</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="At least 6 characters"
-              required
-              minLength={6}
-              className="form-control"
-              autoComplete="new-password"
-            />
-          </div>
-          <div className="form-group">
-            <label>Confirm new password</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new password"
-              required
-              minLength={6}
-              className="form-control"
-              autoComplete="new-password"
-            />
-          </div>
-          {error && <p className="change-password-error">{error}</p>}
-          <button type="submit" className="btn btn-primary change-password-submit" disabled={loading}>
-            {loading ? 'Updating…' : 'Update password'}
-          </button>
-        </form>
+      <div className="change-password-shell">
+        <div className="change-password-card">
+          <h1>Change your password</h1>
+          <p className="change-password-subtitle">
+            Your account was created by an admin. Please set a new password for{' '}
+            <strong>{user.email}</strong>.
+          </p>
+          <form onSubmit={handleSubmit} className="change-password-form" noValidate>
+            <div className="form-group">
+              <label htmlFor="cp-email">Email</label>
+              <input
+                id="cp-email"
+                type="email"
+                value={user.email}
+                readOnly
+                className="form-control readonly"
+                aria-readonly
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cp-current">Current password (one-time password from admin)</label>
+              <input
+                id="cp-current"
+                type="password"
+                value={currentPassword}
+                onChange={onFieldChange(setCurrentPassword)}
+                placeholder="Enter current password"
+                required
+                className="form-control"
+                autoComplete="current-password"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cp-new">New password</label>
+              <input
+                id="cp-new"
+                type="password"
+                value={newPassword}
+                onChange={onFieldChange(setNewPassword)}
+                placeholder="At least 6 characters"
+                required
+                minLength={6}
+                className="form-control"
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cp-confirm">Confirm new password</label>
+              <input
+                id="cp-confirm"
+                type="password"
+                value={confirmPassword}
+                onChange={onFieldChange(setConfirmPassword)}
+                placeholder="Confirm new password"
+                required
+                minLength={6}
+                className="form-control"
+                autoComplete="new-password"
+              />
+            </div>
+            {error ? (
+              <p className="change-password-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              className="btn btn-primary change-password-submit"
+              disabled={loading}
+              aria-busy={loading}
+            >
+              {loading ? 'Updating…' : 'Update password'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
