@@ -55,20 +55,25 @@ export default function ChangePassword() {
     }
 
     const token = getStoredToken();
-    if (!token) {
+    const canUseOtpFallback = Boolean(user?.must_change_password);
+
+    if (!token && !canUseOtpFallback) {
       setError('Session expired. Please sign out, sign in again, then update your password.');
       return;
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
 
     setLoading(true);
     try {
       const res = await fetch(getApiUrl('/change-password'), {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
+          email: user.email,
           current_password: currentPassword,
           new_password: newPassword,
         }),

@@ -1121,17 +1121,28 @@ def api_change_password():
         r = make_response('', 204)
         r.headers['Access-Control-Max-Age'] = '86400'
         return r
+    data = request.get_json(silent=True) or {}
+    current = data.get('current_password') or ''
+    new_pw = data.get('new_password') or ''
+
     user = None
     jwt_user_id = get_jwt_identity()
     if jwt_user_id is not None:
         user = User.query.get(int(jwt_user_id))
     elif current_user.is_authenticated:
         user = User.query.get(current_user.id)
+
+    # Vercel → Railway: no session cookie; first-login OTP change via email + current password
+    if not user:
+        email = (data.get('email') or '').strip().lower()
+        if email and current:
+            candidate = User.query.filter_by(email=email).first()
+            if candidate and getattr(candidate, 'must_change_password', False):
+                if candidate.check_password(current):
+                    user = candidate
+
     if not user:
         return jsonify({'success': False, 'error': 'Login required'}), 401
-    data = request.get_json(silent=True) or {}
-    current = data.get('current_password') or ''
-    new_pw = data.get('new_password') or ''
     if not current or not new_pw:
         return jsonify({'success': False, 'error': 'Current and new password required'}), 400
     if len(new_pw) < 6:
