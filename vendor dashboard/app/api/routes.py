@@ -1137,9 +1137,18 @@ def api_change_password():
         email = (data.get('email') or '').strip().lower()
         if email and current:
             candidate = User.query.filter_by(email=email).first()
-            if candidate and getattr(candidate, 'must_change_password', False):
+            if candidate:
+                if not getattr(candidate, 'must_change_password', False):
+                    return jsonify({
+                        'success': False,
+                        'error': 'Password change not required for this account. Sign in normally.',
+                    }), 403
                 if candidate.check_password(current):
                     user = candidate
+                else:
+                    return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
+            elif email:
+                return jsonify({'success': False, 'error': 'No account found for this email'}), 404
 
     if not user:
         return jsonify({'success': False, 'error': 'Login required'}), 401

@@ -85,7 +85,12 @@ export default function ChangePassword() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Failed to update password.');
+        const msg = data.error || 'Failed to update password.';
+        setError(
+          msg === 'Login required'
+            ? 'Login required — sign in first, use the one-time password in “Current password”, or redeploy the Railway backend (latest API).'
+            : msg
+        );
         return;
       }
       updateUser({ must_change_password: false });
