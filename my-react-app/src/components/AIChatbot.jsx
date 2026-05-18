@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import assistantMarkLogo from '../assets/genspark-gs-circuit-logo.png';
 import './AIChatbot.css';
+
+const GENSPARK_WIDGET_LOGO = '/genspark-gs-circuit-logo.png';
 
 const AIChatbot = () => {
   const navigate = useNavigate();
@@ -332,9 +333,11 @@ const AIChatbot = () => {
             <div className="widget-header-left">
               <div className="widget-avatar">
                 <img
-                  src={assistantMarkLogo}
+                  src={GENSPARK_WIDGET_LOGO}
                   alt="GenSpark Builds"
                   className="widget-avatar-logo"
+                  width={41}
+                  height={41}
                 />
               </div>
               <div className="widget-header-info">
