@@ -21,7 +21,7 @@ const VendorDashboard = lazy(() => import("./pages/VendorDashboard"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const Contact = lazy(() => import("./pages/Contact"));
 const About = lazy(() => import("./pages/About"));
-const ChangePassword = lazy(() => import("./pages/ChangePassword"));
+import ChangePassword from "./pages/ChangePassword";
 const CartPage = lazy(() => import("./pages/CartPage"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const EcomCartPage = lazy(() => import("./ecommerce/CartPage"));

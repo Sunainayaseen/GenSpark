@@ -1,14 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getApiUrl } from '../utils/flaskBase';
-import { getStoredToken } from '../utils/authStorage';
+import { getStoredToken, loadAuthSession } from '../utils/authStorage';
 import './ChangePassword.css';
 
-/**
- * First-login screen when admin added user/vendor with one-time password.
- * User must set a new password; email is shown (readonly).
- */
 export default function ChangePassword() {
   const { user, updateUser, authReady } = useAuth();
   const navigate = useNavigate();
@@ -18,6 +14,13 @@ export default function ChangePassword() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const sessionUser = useMemo(() => {
+    const { user: stored } = loadAuthSession();
+    return stored?.email ? stored : null;
+  }, [user?.email]);
+
+  const activeUser = user?.email ? user : sessionUser;
+
   useEffect(() => {
     setError('');
     setLoading(false);
@@ -25,15 +28,16 @@ export default function ChangePassword() {
 
   useEffect(() => {
     setError('');
-  }, [user?.email]);
+  }, [activeUser?.email]);
 
   useEffect(() => {
-    if (authReady && !user?.email) {
+    if (!authReady) return;
+    if (!activeUser?.email) {
       navigate('/', { replace: true });
     }
-  }, [authReady, user?.email, navigate]);
+  }, [authReady, activeUser?.email, navigate]);
 
-  if (!authReady || !user?.email) {
+  if (!activeUser?.email) {
     return (
       <div className="change-password-page change-password-page--loading" aria-busy="true">
         <p className="change-password-loading">Loading…</p>
@@ -55,7 +59,7 @@ export default function ChangePassword() {
     }
 
     const token = getStoredToken();
-    const canUseOtpFallback = Boolean(user?.must_change_password);
+    const canUseOtpFallback = Boolean(activeUser?.must_change_password);
 
     if (!token && !canUseOtpFallback) {
       setError('Session expired. Please sign out, sign in again, then update your password.');
@@ -73,7 +77,7 @@ export default function ChangePassword() {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          email: user.email,
+          email: activeUser.email,
           current_password: currentPassword,
           new_password: newPassword,
         }),
@@ -105,7 +109,7 @@ export default function ChangePassword() {
           <h1>Change your password</h1>
           <p className="change-password-subtitle">
             Your account was created by an admin. Please set a new password for{' '}
-            <strong>{user.email}</strong>.
+            <strong>{activeUser.email}</strong>.
           </p>
           <form onSubmit={handleSubmit} className="change-password-form" noValidate>
             <div className="form-group">
@@ -113,7 +117,7 @@ export default function ChangePassword() {
               <input
                 id="cp-email"
                 type="email"
-                value={user.email}
+                value={activeUser.email}
                 readOnly
                 className="form-control readonly"
                 aria-readonly

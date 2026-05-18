@@ -8,21 +8,21 @@ import {
 } from '../utils/authStorage';
 
 const AuthContext = createContext();
+const SESSION_CHECK_MS = 8000;
 
 function normalizeUser(raw) {
   if (!raw?.email) return null;
+  const email = String(raw.email).trim();
+  if (!email) return null;
   return {
     id: raw.id,
-    name: raw.name || raw.email.split('@')[0],
-    email: raw.email,
+    name: raw.name || email.split('@')[0],
+    email,
     role: raw.role || 'customer',
     must_change_password: Boolean(raw.must_change_password),
   };
 }
 
-/**
- * Validate session with backend. Returns user, false if token invalid, null if network/skip.
- */
 async function fetchSessionUser(token) {
   const headers = getAuthHeaders();
   try {
@@ -54,42 +54,74 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let cancelled = false;
+
+    const finish = () => {
+      if (!cancelled) setAuthReady(true);
+    };
+
+    const timeout = setTimeout(finish, SESSION_CHECK_MS);
+
     (async () => {
       const { user: storedUser, token } = loadAuthSession();
+
       if (!storedUser?.email) {
-        if (!cancelled) setAuthReady(true);
+        clearTimeout(timeout);
+        finish();
         return;
       }
+
+      const normalizedStored = normalizeUser(storedUser);
 
       if (!token) {
-        if (!cancelled) setAuthReady(true);
+        setUserState(normalizedStored);
+        clearTimeout(timeout);
+        finish();
         return;
       }
 
-      const serverUser = await fetchSessionUser(token);
+      let serverUser = null;
+      try {
+        serverUser = await Promise.race([
+          fetchSessionUser(token),
+          new Promise((resolve) => setTimeout(() => resolve(null), SESSION_CHECK_MS - 500)),
+        ]);
+      } catch (_) {
+        serverUser = null;
+      }
+
       if (cancelled) return;
 
       if (serverUser) {
         setUserState(serverUser);
         saveAuthSession(serverUser, token);
       } else if (serverUser === false) {
-        setUserState(null);
-        clearAuthSession();
+        if (normalizedStored?.must_change_password) {
+          setUserState(normalizedStored);
+        } else {
+          setUserState(null);
+          clearAuthSession();
+        }
+      } else {
+        setUserState(normalizedStored);
       }
-      setAuthReady(true);
+
+      clearTimeout(timeout);
+      finish();
     })();
+
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
     };
   }, []);
 
-  /** Login with API user (+ optional JWT token) or legacy email/password mock. */
   const login = (userOrEmail, passwordOrNull, role = 'buyer') => {
     if (userOrEmail && typeof userOrEmail === 'object' && userOrEmail.email) {
       const { token, ...rest } = userOrEmail;
       const normalized = normalizeUser(rest);
       setUserState(normalized);
       saveAuthSession(normalized, token || null);
+      setAuthReady(true);
       return;
     }
     const normalized = normalizeUser({
@@ -100,6 +132,7 @@ export const AuthProvider = ({ children }) => {
     });
     setUserState(normalized);
     saveAuthSession(normalized, null);
+    setAuthReady(true);
   };
 
   const signup = (name, email, password, role = 'buyer') => {
@@ -109,6 +142,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUserState(null);
     clearAuthSession();
+    setAuthReady(true);
   };
 
   const updateUser = (partial) => {
