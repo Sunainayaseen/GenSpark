@@ -1241,10 +1241,13 @@
 }
 
 .chat-input-form {
+  position: relative;
+  z-index: 20;
   padding: var(--spacing-md) var(--spacing-xl);
   border-top: 1px solid var(--border);
   background: var(--bg-primary);
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .chat-input-wrap {
@@ -1259,7 +1262,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
-  overflow: hidden;
+  overflow: visible;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   box-sizing: border-box;
@@ -1280,6 +1283,7 @@
 .chat-input-plus-wrap {
   position: relative;
   flex-shrink: 0;
+  z-index: 30;
 }
 
 .chat-input-plus-btn {
@@ -1316,16 +1320,29 @@
 
 .chat-input-plus-menu {
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 8px);
   left: 0;
-  margin-bottom: 6px;
-  min-width: 200px;
+  min-width: 220px;
   padding: var(--spacing-xs);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: #fff;
+  border: 1px solid rgba(var(--primary-rgb), 0.2);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  z-index: 50;
+  box-shadow:
+    0 4px 6px rgba(15, 23, 42, 0.06),
+    0 16px 32px rgba(15, 23, 42, 0.14);
+  z-index: 100;
+  animation: plusMenuIn 0.18s ease-out;
+}
+
+@keyframes plusMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-plus-option {

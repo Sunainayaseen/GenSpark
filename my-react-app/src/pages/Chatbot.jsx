@@ -291,14 +291,20 @@ const Chatbot = () => {
   }, [cameraActive, liveDetectOn]);
 
   useEffect(() => {
-    if (!plusMenuOpen) return;
+    if (!plusMenuOpen) return undefined;
     const onDocClick = (e) => {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target)) {
         setPlusMenuOpen(false);
       }
     };
-    document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
+    // Defer so the same click that opened the menu does not immediately close it
+    const timer = window.setTimeout(() => {
+      document.addEventListener('click', onDocClick, true);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('click', onDocClick, true);
+    };
   }, [plusMenuOpen]);
 
   useEffect(() => {
@@ -788,10 +794,14 @@ const Chatbot = () => {
                 <button
                   type="button"
                   className="chat-input-plus-btn"
-                  onClick={(e) => { e.stopPropagation(); setPlusMenuOpen((v) => !v); }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPlusMenuOpen((v) => !v);
+                  }}
                   aria-expanded={plusMenuOpen}
-                  aria-haspopup="true"
-                  aria-label="Choose how to get recommendations"
+                  aria-haspopup="menu"
+                  aria-label="Add image, camera, or text recommendation"
                 >
                   <svg
                     className="chat-input-plus-icon"
