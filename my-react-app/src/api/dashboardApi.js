@@ -24,7 +24,16 @@ async function request(endpoint, options = {}) {
   if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
     config.body = JSON.stringify(options.body);
   }
-  const res = await fetch(url, config);
+  let res;
+  try {
+    res = await fetch(url, config);
+  } catch (networkErr) {
+    const err = new Error(
+      'Could not reach the API. Check your internet connection, or redeploy Railway if the password route was just updated.'
+    );
+    err.cause = networkErr;
+    throw err;
+  }
   if (!res.ok) {
     const raw = await res.text();
     let parsed = null;

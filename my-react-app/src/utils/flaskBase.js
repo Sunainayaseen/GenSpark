@@ -14,6 +14,18 @@ export function getApiBase() {
   const railway = RAILWAY_API_BASE.replace(/\/$/, '');
   const fromEnv = import.meta.env?.VITE_API_BASE?.replace(/\/$/, '');
 
+  if (import.meta.env.PROD && typeof window !== 'undefined') {
+    const host = window.location.hostname || '';
+    // Vercel: same-origin /api → vercel.json proxies to Railway (avoids CORS "Failed to fetch")
+    if (VERCEL_HOST_RE.test(host)) {
+      return window.location.origin.replace(/\/$/, '');
+    }
+    if (fromEnv && !LOCAL_API_PATTERN.test(fromEnv) && !VERCEL_HOST_RE.test(fromEnv)) {
+      return fromEnv;
+    }
+    return railway;
+  }
+
   if (import.meta.env.PROD) {
     if (fromEnv && !LOCAL_API_PATTERN.test(fromEnv) && !VERCEL_HOST_RE.test(fromEnv)) {
       return fromEnv;

@@ -74,9 +74,15 @@ export default function ChangePassword() {
       navigate('/', { replace: true });
     } catch (err) {
       let msg = err?.data?.error || err?.message || 'Network error.';
-      if (String(msg).toLowerCase().includes('login required')) {
+      if (/failed to fetch|could not reach/i.test(String(msg))) {
         msg =
-          'The live API is still on an old build (session-only password change). Redeploy Railway from latest main, then use your one-time login password in Current password.';
+          'Network error talking to the API. Refresh the page and try again. If it persists, redeploy Railway from latest GitHub main.';
+      } else if (String(msg).toLowerCase().includes('login required')) {
+        msg =
+          'Server is on an old build. Redeploy Railway (vendor dashboard folder), then use your one-time login password in Current password.';
+      } else if (String(msg).toLowerCase().includes('current password is wrong')) {
+        msg =
+          'Current password is wrong. Use the one-time password from registration/admin email (the one you use to log in), not your new password.';
       }
       setError(msg);
     } finally {

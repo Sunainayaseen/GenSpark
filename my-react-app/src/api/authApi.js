@@ -64,9 +64,22 @@ export async function registerWithApi({ name, email, role }) {
  * @returns {{ success: boolean, message?: string }}
  */
 export async function changePasswordWithApi({ email, current_password, new_password }) {
-  return dashboardPost('/force-update-password', {
+  const body = {
     email: String(email || '').trim(),
     current_password,
     new_password,
-  });
+  };
+  // Try legacy path first (OPTIONS/CORS work on live Railway); then new open route.
+  const paths = ['/change-password', '/force-update-password'];
+  let lastError;
+  for (const path of paths) {
+    try {
+      return await dashboardPost(path, body);
+    } catch (err) {
+      lastError = err;
+      if (err.status === 404) continue;
+      throw err;
+    }
+  }
+  throw lastError || new Error('Password update is not available on the server yet.');
 }
