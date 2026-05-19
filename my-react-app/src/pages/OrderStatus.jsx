@@ -54,6 +54,70 @@ const formatTime = (iso) => {
   }
 };
 
+/** Presentational status badge for header (no business logic). */
+function statusBadgeClass(status) {
+  const s = (status || '').toLowerCase();
+  if (s === 'pending' || s === 'admin-review') return 'os-badge os-badge--pending';
+  if (s === 'rejected' || s === 'cancelled') return 'os-badge os-badge--rejected';
+  if (s === 'completed' || s === 'delivered') return 'os-badge os-badge--done';
+  if (s === 'shipped') return 'os-badge os-badge--shipped';
+  if (s === 'ready_to_dispatch') return 'os-badge os-badge--ready';
+  if (s === 'approved' || s === 'processing' || s === 'assembly' || s === 'qa' || s === 'accepted') {
+    return 'os-badge os-badge--progress';
+  }
+  return 'os-badge os-badge--neutral';
+}
+
+function formatStatusLabel(status) {
+  if (!status) return 'Unknown';
+  return String(status).replace(/_/g, ' ');
+}
+
+/** Icon + tone for timeline rows (presentation only). */
+function timelineEntryMeta(message, status) {
+  const text = `${message || ''} ${status || ''}`.toLowerCase();
+  if (text.includes('reject') || text.includes('cancel')) {
+    return { icon: '✕', tone: 'danger' };
+  }
+  if (text.includes('ship') || text.includes('dispatch')) {
+    return { icon: '🚚', tone: 'info' };
+  }
+  if (text.includes('approv') || text.includes('proof') || text.includes('complete')) {
+    return { icon: '✓', tone: 'success' };
+  }
+  if (text.includes('vendor') || text.includes('assign')) {
+    return { icon: '🏪', tone: 'vendor' };
+  }
+  if (text.includes('process') || text.includes('assembl')) {
+    return { icon: '⚙', tone: 'progress' };
+  }
+  return { icon: '📋', tone: 'default' };
+}
+
+/** Vendor card badge + progress (presentation only). */
+function vendorStatusMeta(status) {
+  const s = (status || '').toLowerCase();
+  if (s === 'completed' || s === 'delivered') {
+    return { label: 'Completed', badge: 'os-vendor-badge--done', progress: 100 };
+  }
+  if (s === 'shipped' || s === 'ready_to_dispatch') {
+    return { label: formatStatusLabel(status), badge: 'os-vendor-badge--ship', progress: 90 };
+  }
+  if (s === 'processing' || s === 'assembly' || s === 'qa' || s === 'accepted') {
+    return { label: formatStatusLabel(status), badge: 'os-vendor-badge--active', progress: 55 };
+  }
+  if (s === 'rejected' || s === 'cancelled') {
+    return { label: formatStatusLabel(status), badge: 'os-vendor-badge--danger', progress: 0 };
+  }
+  return { label: formatStatusLabel(status), badge: 'os-vendor-badge--pending', progress: 25 };
+}
+
+function vendorInitials(name) {
+  const parts = String(name || 'V').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (parts[0]?.[0] || 'V').toUpperCase();
+}
+
 const OrderStatus = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -150,7 +214,12 @@ const OrderStatus = () => {
   if (loading) {
     return (
       <div className="order-status-page">
-        <div className="container"><p>Loading order...</p></div>
+        <div className="container">
+          <div className="os-loading" aria-busy="true" aria-live="polite">
+            <div className="os-loading__spinner" aria-hidden="true" />
+            <p>Loading your order…</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -159,9 +228,11 @@ const OrderStatus = () => {
     return (
       <div className="order-status-page">
         <div className="container">
-          <div className="page-header">
-            <h1>Order #{id}</h1>
-          </div>
+          <header className="os-hero">
+            <div className="os-hero__main">
+              <h1>Order #{id}</h1>
+            </div>
+          </header>
           <div className="order-not-found">
             <p>{error || 'Order not found.'}</p>
             {error && String(error).toLowerCase().includes('signed in') ? (
@@ -175,7 +246,7 @@ const OrderStatus = () => {
                 </Link>
               </p>
             ) : null}
-            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
               <button type="button" className="btn btn-primary" onClick={() => navigate('/builds')}>
                 View predefined PCs
               </button>
@@ -187,43 +258,67 @@ const OrderStatus = () => {
   }
 
   const isEcom = order._source === 'ecom';
+  const stepperFillWidth =
+    currentStepIndex >= 0 && ORDER_STAGES.length > 1
+      ? `${(currentStepIndex / (ORDER_STAGES.length - 1)) * 100}%`
+      : '0%';
 
   return (
     <div className="order-status-page">
       <div className="container">
-        <div className="page-header">
-          <h1>{order.order_number || `Order #${order.id}`}</h1>
-          {isEcom ? (
-            <button type="button" className="btn btn-secondary" disabled>
-              Shop order — {order.status}
-            </button>
-          ) : order.status === 'pending' ? (
-            <button type="button" className="btn btn-secondary" disabled>Waiting for Admin Approval</button>
-          ) : order.status === 'rejected' ? (
-            <button type="button" className="btn btn-secondary" disabled>Rejected</button>
-          ) : order.status === 'ready_to_dispatch' ? (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => navigate('/checkout')}
-            >
-              Place order
-            </button>
-          ) : order.status === 'shipped' ? (
-            <button type="button" className="btn btn-secondary" disabled>Shipped</button>
-          ) : order.status === 'completed' ? (
-            <button type="button" className="btn btn-secondary" disabled>Completed</button>
-          ) : (
-            <button type="button" className="btn btn-secondary" disabled>Vendor orders in progress</button>
-          )}
-        </div>
+        <header className="os-hero">
+          <div className="os-hero__main">
+            <Link to="/my-orders" className="os-back">← My orders</Link>
+            <h1>{order.order_number || `Order #${order.id}`}</h1>
+            <p className="os-hero__meta">
+              <span className={statusBadgeClass(order.status)}>{formatStatusLabel(order.status)}</span>
+              <span aria-hidden="true">·</span>
+              <span>{isEcom ? 'Shop order' : 'Custom PC build'}</span>
+            </p>
+          </div>
+          <div className="os-hero__actions">
+            {isEcom ? (
+              <button type="button" className="btn btn-secondary" disabled>
+                Shop order — {order.status}
+              </button>
+            ) : order.status === 'pending' ? (
+              <button type="button" className="btn btn-secondary" disabled>Waiting for Admin Approval</button>
+            ) : order.status === 'rejected' ? (
+              <button type="button" className="btn btn-secondary" disabled>Rejected</button>
+            ) : order.status === 'ready_to_dispatch' ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => navigate('/checkout')}
+              >
+                Place order
+              </button>
+            ) : order.status === 'shipped' ? (
+              <button type="button" className="btn btn-secondary" disabled>Shipped</button>
+            ) : order.status === 'completed' ? (
+              <button type="button" className="btn btn-secondary" disabled>Completed</button>
+            ) : (
+              <button type="button" className="btn btn-secondary" disabled>Vendor orders in progress</button>
+            )}
+          </div>
+        </header>
 
         <div className="order-content">
-          <div className="order-card">
+          <section className="order-card" aria-labelledby="order-summary-heading">
             <div className="order-header">
-              <h2>{isEcom ? 'Shop order' : 'GenSpark order'}</h2>
+              <h2 id="order-summary-heading">{isEcom ? 'Shop order' : 'Order summary'}</h2>
               <div className="order-price">PKR {priceBreakdown.total.toLocaleString()}</div>
             </div>
+            {(order.items || []).length > 0 && (
+              <ul className="os-items-list" aria-label="Order items">
+                {order.items.map((it) => (
+                  <li key={it.id ?? `${it.item_id}-${it.component_name}`}>
+                    <strong>{it.component_name || `Item #${it.item_id}`}</strong>
+                    <span>×{it.quantity} · PKR {Number(it.total_price || 0).toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="order-price-breakdown" role="table" aria-label="Order pricing">
               <div className="order-price-row">
                 <span>Subtotal (items)</span>
@@ -238,89 +333,149 @@ const OrderStatus = () => {
                 <span>PKR {priceBreakdown.total.toLocaleString()}</span>
               </div>
             </div>
-            <div className="order-vendor">
-              <span className="vendor-label">Vendor:</span>
-              <span className="vendor-name">
-                {isEcom ? 'N/A (direct shop order)' : 'Multi-vendor split by admin approval'}
-              </span>
-            </div>
-            {order.shipping_address && (
-              <div className="order-payment">
-                <span className="payment-label">Shipping:</span>
-                <span>{order.shipping_address}</span>
+            <div className="os-detail-grid">
+              <div className="os-detail-item">
+                <span className="os-detail-item__label">Vendor</span>
+                <span className="os-detail-item__value">
+                  {isEcom ? 'N/A (direct shop order)' : 'Multi-vendor split after admin approval'}
+                </span>
               </div>
-            )}
-          </div>
+              {order.shipping_address && (
+                <div className="os-detail-item">
+                  <span className="os-detail-item__label">Delivery</span>
+                  <span className="os-detail-item__value">{order.shipping_address}</span>
+                </div>
+              )}
+            </div>
+          </section>
 
-          <div className="status-timeline">
-            <h3>Order Status</h3>
+          <section className="status-timeline os-section" aria-labelledby="order-status-heading">
+            <div className="os-section__head">
+              <span className="os-section__icon" aria-hidden="true">📍</span>
+              <h3 id="order-status-heading">Order Status</h3>
+            </div>
             {order.status === 'rejected' || order.status === 'cancelled' ? (
               <p className="order-rejected-msg" role="status">
                 {order.status === 'cancelled' ? 'This order was cancelled.' : 'This order was rejected. Details appear in the timeline below.'}
               </p>
             ) : (
-              <div className="status-bar">
-                {ORDER_STAGES.map((step, idx) => (
-                  <div
-                    key={step.key}
-                    className={`status-step ${idx <= currentStepIndex ? 'active' : ''} ${idx === currentStepIndex ? 'current' : ''}`}
-                  >
-                    <div className="step-icon">{step.icon}</div>
-                    <div className="step-label">{step.label}</div>
-                    {idx < ORDER_STAGES.length - 1 && (
-                      <div className={`step-connector ${idx < currentStepIndex ? 'active' : ''}`}></div>
-                    )}
+              <>
+                <p className="os-section__hint">Follow your build from placement through delivery.</p>
+                <div className="os-stepper-wrap">
+                  <div className="os-stepper-track" aria-hidden="true">
+                    <div className="os-stepper-fill" style={{ width: stepperFillWidth }} />
                   </div>
-                ))}
+                  <div className="status-bar">
+                    {ORDER_STAGES.map((step, idx) => (
+                      <div
+                        key={step.key}
+                        className={`status-step ${idx <= currentStepIndex ? 'active' : ''} ${idx === currentStepIndex ? 'current' : ''}`}
+                      >
+                        <div className="step-icon">{step.icon}</div>
+                        <div className="step-label">{step.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
+          <section className="timeline-entries os-section" aria-labelledby="timeline-heading">
+            <div className="os-section__head">
+              <span className="os-section__icon" aria-hidden="true">🔔</span>
+              <div>
+                <h3 id="timeline-heading">Timeline &amp; Notifications</h3>
+                <p className="os-section__sub">Updates as your order moves through each stage</p>
+              </div>
+            </div>
+            <ul className="os-feed" aria-label="Order activity">
+              {timeline.map((entry, idx) => {
+                const meta = timelineEntryMeta(entry.message, entry.status);
+                const isLatest = idx === timeline.length - 1;
+                return (
+                  <li
+                    key={`${entry.timestamp}-${idx}`}
+                    className={`os-feed-item os-feed-item--${meta.tone}${isLatest ? ' os-feed-item--latest' : ''}`}
+                  >
+                    <span className="os-feed-item__rail" aria-hidden="true">
+                      <span className="os-feed-item__icon">{meta.icon}</span>
+                    </span>
+                    <div className="os-feed-item__body">
+                      <div className="os-feed-item__top">
+                        <p className="os-feed-item__message">{entry.message}</p>
+                        {isLatest && <span className="os-feed-item__pill">Latest</span>}
+                      </div>
+                      <time className="os-feed-item__time" dateTime={entry.timestamp || undefined}>
+                        {formatTime(entry.timestamp)}
+                      </time>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <section className="timeline-entries os-section" aria-labelledby="vendor-progress-heading">
+            <div className="os-section__head">
+              <span className="os-section__icon" aria-hidden="true">🏪</span>
+              <div>
+                <h3 id="vendor-progress-heading">Per-Vendor Progress</h3>
+                <p className="os-section__sub">Each supplier fulfills their part of your build</p>
+              </div>
+            </div>
+            {!order.vendor_orders?.length ? (
+              <div className="os-empty-vendor">
+                <div className="os-empty-vendor__icon" aria-hidden="true">⏳</div>
+                <p>Vendor orders will appear here after admin approval.</p>
+              </div>
+            ) : (
+              <div className="os-vendor-grid">
+                {(order.vendor_orders || []).map((vo) => {
+                  const shop = vo.vendor_shop_name || `Vendor #${vo.vendor_id}`;
+                  const vMeta = vendorStatusMeta(vo.status);
+                  return (
+                    <article key={vo.id} className="os-vendor-card">
+                      <header className="os-vendor-card__head">
+                        <div className="os-vendor-card__identity">
+                          <span className="os-vendor-card__avatar" aria-hidden="true">
+                            {vendorInitials(shop)}
+                          </span>
+                          <div>
+                            <h4 className="os-vendor-card__name">{shop}</h4>
+                            <span className={`os-vendor-badge ${vMeta.badge}`}>{vMeta.label}</span>
+                          </div>
+                        </div>
+                        <span className="os-vendor-card__amount">
+                          PKR {Number(vo.total_amount || 0).toLocaleString()}
+                        </span>
+                      </header>
+                      <div className="os-vendor-card__progress" aria-hidden="true">
+                        <div
+                          className="os-vendor-card__progress-fill"
+                          style={{ width: `${vMeta.progress}%` }}
+                        />
+                      </div>
+                      <p className="os-vendor-card__progress-label">
+                        <span>Fulfillment</span>
+                        <span>{vMeta.progress}%</span>
+                      </p>
+                      {(vo.items || []).length > 0 && (
+                        <ul className="os-vendor-card__items">
+                          {(vo.items || []).map((it, i) => (
+                            <li key={it.id ?? i}>
+                              <span className="os-vendor-card__item-name">{it.component_name}</span>
+                              <span className="os-vendor-card__item-qty">×{it.quantity}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             )}
-          </div>
-
-          <div className="timeline-entries">
-            <h3>Timeline & Notifications</h3>
-            <div className="timeline-list">
-              {timeline.map((entry, idx) => (
-                <div key={idx} className="timeline-entry">
-                  <div className="timeline-dot"></div>
-                  <div className="timeline-content">
-                    <div className="timeline-header">
-                      <span className="timeline-message">{entry.message}</span>
-                      <span className="timeline-time">{formatTime(entry.timestamp)}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="timeline-entries">
-            <h3>Per-Vendor Progress</h3>
-            <div className="timeline-list">
-              {(order.vendor_orders || []).map((vo) => (
-                <div key={vo.id} className="timeline-entry">
-                  <div className="timeline-dot"></div>
-                  <div className="timeline-content">
-                    <div className="timeline-header">
-                      <span className="timeline-message">
-                        {vo.vendor_shop_name || `Vendor #${vo.vendor_id}`} — {vo.status}
-                      </span>
-                      <span className="timeline-time">PKR {Number(vo.total_amount || 0).toLocaleString()}</span>
-                    </div>
-                    <div className="whatsapp-preview">
-                      <span className="whatsapp-text">
-                        {(vo.items || []).map((it) => `${it.component_name} x${it.quantity}`).join(', ')}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {!order.vendor_orders?.length && (
-                <div className="timeline-entry">
-                  <div className="timeline-content">Vendor orders will appear after admin approval.</div>
-                </div>
-              )}
-            </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>
@@ -328,10 +483,3 @@ const OrderStatus = () => {
 };
 
 export default OrderStatus;
-
-
-
-
-
-
-
