@@ -2,43 +2,77 @@
 Align Flask-Login session with JWT Bearer on /api/* (Vercel frontend → Railway backend).
 
 Cart routes use current_user + session['cart_id']; they do not call jwt_required().
-This bridge lets the existing login flow (JWT in Authorization header) activate the
-same session cart logic without changing cart_controller business rules.
+This bridge decodes Authorization: Bearer without relying on session cookies.
 """
+from flask import request
+from flask_jwt_extended import decode_token, get_jwt_identity, verify_jwt_in_request
 from flask_login import current_user, login_user
-from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+
+
+def extract_bearer_token():
+    """Authorization header value after 'Bearer ' (or None)."""
+    auth = (request.headers.get('Authorization') or '').strip()
+    if not auth:
+        return None
+    parts = auth.split(None, 1)
+    if len(parts) == 2 and parts[0].lower() == 'bearer' and parts[1].strip():
+        return parts[1].strip()
+    return None
+
+
+def _user_from_jwt_token(token):
+    """Decode JWT and load User — does not use @jwt_required or session cookies."""
+    if not token:
+        return None
+    try:
+        decoded = decode_token(token)
+    except Exception:
+        return None
+    sub = decoded.get('sub')
+    if sub is None:
+        return None
+    from app.models import User
+
+    user = User.query.get(int(sub))
+    if not user:
+        return None
+    if getattr(user, 'status', 'active') != 'active':
+        return None
+    return user
 
 
 def sync_flask_login_from_jwt():
+    """Attach Flask-Login session from Bearer token when cookies are unavailable."""
     if current_user.is_authenticated:
         return
-    verify_jwt_in_request(optional=True)
-    user_id = get_jwt_identity()
-    if user_id is None:
-        return
-    from app.models import User
-
-    user = User.query.get(int(user_id))
-    if not user:
-        return
-    if getattr(user, 'status', 'active') != 'active':
-        return
-    login_user(user, remember=False)
+    user = resolve_api_user()
+    if user:
+        login_user(user, remember=False)
 
 
 def resolve_api_user():
     """
-    Resolve User from Bearer JWT and/or Flask-Login session (after sync).
-    Used by routes that declare jwt_required(optional=True) on cross-origin clients.
+    Resolve User from Bearer JWT and/or Flask-Login session.
+    Safe for cross-origin (Vercel → Railway) without @login_required.
     """
-    sync_flask_login_from_jwt()
-    user_id = get_jwt_identity()
-    if user_id is not None:
-        from app.models import User
-
-        user = User.query.get(int(user_id))
+    token = extract_bearer_token()
+    if token:
+        user = _user_from_jwt_token(token)
         if user:
             return user
+
+    try:
+        verify_jwt_in_request(optional=True)
+        user_id = get_jwt_identity()
+        if user_id is not None:
+            from app.models import User
+
+            user = User.query.get(int(user_id))
+            if user:
+                return user
+    except Exception:
+        pass
+
     if current_user.is_authenticated:
         from app.models import User
 

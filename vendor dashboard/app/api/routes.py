@@ -1256,9 +1256,8 @@ def api_admin_login():
 
 # ---------- Change password (first login or user-initiated) ----------
 @api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
-@jwt_required(optional=True)
 def api_change_password():
-    """POST /api/change-password - JSON { current_password, new_password }. Session or JWT Bearer."""
+    """POST /api/change-password - JSON { current_password, new_password }. Bearer JWT via resolve_api_user (no session cookie)."""
     if request.method == 'OPTIONS':
         r = make_response('', 204)
         r.headers['Access-Control-Max-Age'] = '86400'
@@ -1267,30 +1266,35 @@ def api_change_password():
     current = data.get('current_password') or ''
     new_pw = data.get('new_password') or ''
 
-    from app.utils.jwt_session_bridge import resolve_api_user
+    from app.utils.jwt_session_bridge import extract_bearer_token, resolve_api_user
 
     user = resolve_api_user()
 
-    # Vercel → Railway: no session cookie; first-login OTP change via email + current password
+    # Fallback: email + current password (first-login OTP) when Bearer missing or undecodable
     if not user:
         email = (data.get('email') or '').strip().lower()
+        bearer_sent = bool(extract_bearer_token())
         if email and current:
             candidate = User.query.filter_by(email=email).first()
             if candidate:
-                if not getattr(candidate, 'must_change_password', False):
-                    return jsonify({
-                        'success': False,
-                        'error': 'Password change not required for this account. Sign in normally.',
-                    }), 403
                 if candidate.check_password(current):
-                    user = candidate
+                    if getattr(candidate, 'must_change_password', False) or bearer_sent:
+                        user = candidate
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Password change not required for this account. Sign in normally.',
+                        }), 403
                 else:
                     return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
-            elif email:
+            else:
                 return jsonify({'success': False, 'error': 'No account found for this email'}), 404
 
     if not user:
-        return jsonify({'success': False, 'error': 'Login required'}), 401
+        return jsonify({
+            'success': False,
+            'error': 'Login required — sign in again and ensure Authorization Bearer token is sent.',
+        }), 401
     if not current or not new_pw:
         return jsonify({'success': False, 'error': 'Current and new password required'}), 400
     if len(new_pw) < 6:
