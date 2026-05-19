@@ -66,6 +66,14 @@ def _genspark_root():
     return Path(__file__).resolve().parents[3]
 
 
+def _vendor_dashboard_root():
+    return Path(__file__).resolve().parents[2]
+
+
+def _bundled_model_dir():
+    return _vendor_dashboard_root() / 'models'
+
+
 # Resolved when GENSPARK_YOLO_MODEL is unset: newest weights/best.pt under detect runs.
 _detection_model_cache: Path | None = None
 _detection_model_logged: bool = False
@@ -73,10 +81,15 @@ _detection_model_logged: bool = False
 
 def _legacy_detection_model_candidates():
     """Fixed paths used before auto-discovery (still used as fallback)."""
+    root = _genspark_root()
+    bundled = _bundled_model_dir() / 'best.pt'
     return [
+        bundled,
+        root / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt',
+        root / 'runs' / 'detect' / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt',
+        root / 'yolov8n.pt',
+        root / 'yolov8n-seg.pt',
         Path.home() / 'yolov5' / 'runs' / 'detect' / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt',
-        _genspark_root() / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt',
-        _genspark_root() / 'runs' / 'detect' / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt',
     ]
 
 
@@ -122,6 +135,17 @@ def _detection_model_path(force_refresh: bool = False) -> Path:
 
     if _detection_model_cache and not force_refresh and _detection_model_cache.exists():
         return _detection_model_cache
+
+    bundled = _bundled_model_dir() / 'best.pt'
+    if bundled.exists():
+        _detection_model_cache = bundled
+        if not _detection_model_logged:
+            _detection_model_logged = True
+            try:
+                current_app.logger.info('YOLO model (bundled): %s', bundled)
+            except RuntimeError:
+                pass
+        return bundled
 
     discovered = _discover_best_pt_files()
     if discovered:
@@ -214,14 +238,137 @@ def _norm_xywh_to_xyxy_pixel(xc, yc, bw, bh, iw, ih):
     return [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)]
 
 
+def _public_detection_error(technical: str) -> str:
+    """User-safe message for API/frontend; log technical detail server-side."""
+    t = (technical or '').strip()
+    if not t:
+        return 'Component detection could not be completed. Please try again.'
+    low = t.lower()
+    try:
+        current_app.logger.warning('Detection technical: %s', t)
+    except RuntimeError:
+        pass
+    if 'model not found' in low or 'best.pt' in low or 'yolov8' in low:
+        return (
+            'Component detection is temporarily unavailable. '
+            'The AI model is not configured on this server yet. '
+            'You can still get build recommendations using the form on the left, '
+            'or browse parts on the Components page.'
+        )
+    if 'yolo command not found' in low or 'ultralytics' in low:
+        return (
+            'The detection service is still being set up on the server. '
+            'Please try again later or continue without camera detection.'
+        )
+    if len(t) > 100 or '/root/' in t or '.pt' in low or 'runs/detect' in low:
+        return (
+            'We could not run component detection on this image. '
+            'Try a clearer, well-lit photo, or use Get recommendations without uploading.'
+        )
+    return t if len(t) <= 120 else (
+        'Component detection could not be completed. Please try again.'
+    )
+
+
+def _boxes_to_detections(result, img_w, img_h):
+    """Build API detection list from an Ultralytics result object."""
+    detections = []
+    boxes = getattr(result, 'boxes', None)
+    if boxes is None or len(boxes) == 0:
+        return detections
+
+    for box in boxes:
+        class_id = int(box.cls[0])
+        conf01 = float(box.conf[0])
+        confidence_pct = round(conf01 * 100, 2)
+        component = _component_name(class_id)
+
+        xyxy_px = box.xyxy[0].tolist()
+        x1, y1, x2, y2 = map(float, xyxy_px)
+        if img_w and img_h:
+            xc = ((x1 + x2) / 2) / img_w
+            yc = ((y1 + y2) / 2) / img_h
+            bw = (x2 - x1) / img_w
+            bh = (y2 - y1) / img_h
+            xyxy = [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)]
+        else:
+            xc = yc = bw = bh = 0.0
+            xyxy = xyxy_px
+
+        box_norm = {'xCenter': xc, 'yCenter': yc, 'width': bw, 'height': bh}
+        common = {
+            'classId': class_id,
+            'class_name': component,
+            'confidence_model': round(conf01, 4),
+            'box': box_norm,
+            'xyxy': xyxy,
+        }
+        if confidence_pct < DISPLAY_CONFIRM_CONFIDENCE_PCT:
+            detections.append({
+                **common,
+                'type': 'UNKNOWN',
+                'name': 'Unknown Component',
+                'spec': f'Below {DISPLAY_CONFIRM_CONFIDENCE_PCT:.0f}% certainty — not labeled as a trained part',
+                'confidence': confidence_pct,
+                'rawGuess': component.title(),
+            })
+        else:
+            detections.append({
+                **common,
+                'type': component.upper(),
+                'name': component.title(),
+                'spec': f'{confidence_pct}% confidence',
+                'confidence': confidence_pct,
+            })
+    return detections
+
+
 def _run_yolo_detection(image_path, confidence=0.55):
     model_path = _detection_model_path()
     if not model_path.exists():
-        return None, f'Model not found: {model_path}'
+        return None, _public_detection_error(f'Model not found: {model_path}')
+
+    try:
+        from ultralytics import YOLO
+
+        model = YOLO(str(model_path))
+        results = model.predict(
+            source=str(image_path),
+            conf=confidence,
+            verbose=False,
+        )
+        if not results:
+            return {
+                'detections': [],
+                'model': str(model_path),
+                'output_dir': '',
+                'image_width': None,
+                'image_height': None,
+            }, None
+
+        r0 = results[0]
+        img_w, img_h = _read_image_pixel_size(image_path)
+        if (not img_w or not img_h) and getattr(r0, 'orig_shape', None):
+            img_h, img_w = int(r0.orig_shape[0]), int(r0.orig_shape[1])
+
+        detections = _boxes_to_detections(r0, img_w, img_h)
+        return {
+            'detections': detections,
+            'model': str(model_path),
+            'output_dir': '',
+            'image_width': img_w,
+            'image_height': img_h,
+        }, None
+    except ImportError:
+        pass
+    except Exception as exc:
+        return None, _public_detection_error(str(exc))
 
     yolo_cmd = shutil.which('yolo')
     if not yolo_cmd:
-        return None, 'YOLO command not found. Install Ultralytics or make sure yolo is available in PATH.'
+        return None, _public_detection_error(
+            'Ultralytics is not installed. Run: pip install ultralytics'
+        )
 
     run_name = f'api-{uuid.uuid4().hex[:10]}'
     output_root = Path.home() / 'yolov5' / 'genspark_api_runs'
@@ -246,7 +393,7 @@ def _run_yolo_detection(image_path, confidence=0.55):
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
     if result.returncode != 0:
         error = (result.stderr or result.stdout or 'YOLO prediction failed').strip()
-        return None, error
+        return None, _public_detection_error(error)
 
     labels_file = output_root / run_name / 'labels' / f'{image_path.stem}.txt'
     detections = []
@@ -262,12 +409,7 @@ def _run_yolo_detection(image_path, confidence=0.55):
             confidence_pct = round(conf01 * 100, 2)
             component = _component_name(class_id)
             xyxy = _norm_xywh_to_xyxy_pixel(xc, yc, bw, bh, img_w, img_h)
-            box = {
-                'xCenter': xc,
-                'yCenter': yc,
-                'width': bw,
-                'height': bh,
-            }
+            box = {'xCenter': xc, 'yCenter': yc, 'width': bw, 'height': bh}
             common = {
                 'classId': class_id,
                 'class_name': component,
