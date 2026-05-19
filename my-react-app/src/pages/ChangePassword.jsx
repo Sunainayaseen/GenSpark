@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dashboardPost } from '../api/dashboardApi';
-import { getStoredToken, loadAuthSession } from '../utils/authStorage';
+import { loadAuthSession } from '../utils/authStorage';
 import './ChangePassword.css';
 
 export default function ChangePassword() {
-  const { user, updateUser, authReady, token: contextToken } = useAuth();
+  const { user, updateUser, authReady } = useAuth();
   const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -55,14 +55,6 @@ export default function ChangePassword() {
     }
     if (newPassword !== confirmPassword) {
       setError('New password and confirm do not match.');
-      return;
-    }
-
-    const token = contextToken || getStoredToken();
-    const canUseOtpFallback = Boolean(activeUser?.must_change_password);
-
-    if (!token && !canUseOtpFallback) {
-      setError('Session expired. Please sign out, sign in again, then update your password.');
       return;
     }
 

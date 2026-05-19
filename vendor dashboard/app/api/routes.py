@@ -1257,50 +1257,48 @@ def api_admin_login():
 # ---------- Change password (first login or user-initiated) ----------
 @api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
 def api_change_password():
-    """POST /api/change-password - JSON { current_password, new_password }. Bearer JWT via resolve_api_user (no session cookie)."""
+    """POST /api/change-password — email + current_password proves identity (no session cookie)."""
     if request.method == 'OPTIONS':
         r = make_response('', 204)
         r.headers['Access-Control-Max-Age'] = '86400'
         return r
     data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip()
     current = data.get('current_password') or ''
     new_pw = data.get('new_password') or ''
 
-    from app.utils.jwt_session_bridge import extract_bearer_token, resolve_api_user
-
-    user = resolve_api_user()
-
-    # Fallback: email + current password (first-login OTP) when Bearer missing or undecodable
-    if not user:
-        email = (data.get('email') or '').strip().lower()
-        bearer_sent = bool(extract_bearer_token())
-        if email and current:
-            candidate = User.query.filter_by(email=email).first()
-            if candidate:
-                if candidate.check_password(current):
-                    if getattr(candidate, 'must_change_password', False) or bearer_sent:
-                        user = candidate
-                    else:
-                        return jsonify({
-                            'success': False,
-                            'error': 'Password change not required for this account. Sign in normally.',
-                        }), 403
-                else:
-                    return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
-            else:
-                return jsonify({'success': False, 'error': 'No account found for this email'}), 404
-
-    if not user:
-        return jsonify({
-            'success': False,
-            'error': 'Login required — sign in again and ensure Authorization Bearer token is sent.',
-        }), 401
     if not current or not new_pw:
         return jsonify({'success': False, 'error': 'Current and new password required'}), 400
     if len(new_pw) < 6:
         return jsonify({'success': False, 'error': 'New password must be at least 6 characters'}), 400
-    if not user or not user.check_password(current):
-        return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
+
+    from app.utils.jwt_session_bridge import find_user_by_email, resolve_api_user
+
+    user = None
+
+    # Primary: email + current password (works Vercel → Railway without cookies/JWT)
+    if email:
+        candidate = find_user_by_email(email)
+        if not candidate:
+            return jsonify({'success': False, 'error': 'No account found for this email'}), 404
+        if not candidate.check_password(current):
+            return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
+        user = candidate
+
+    if not user:
+        user = resolve_api_user()
+        if user and not user.check_password(current):
+            return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
+
+    if not user:
+        return jsonify({
+            'success': False,
+            'error': (
+                'Could not verify your account. Use the same email you signed in with and '
+                'enter the one-time password you used to log in (not the new password).'
+            ),
+        }), 401
+
     user.set_password(new_pw)
     user.must_change_password = False
     db.session.commit()

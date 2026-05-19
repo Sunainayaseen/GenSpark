@@ -4,9 +4,10 @@ Align Flask-Login session with JWT Bearer on /api/* (Vercel frontend → Railway
 Cart routes use current_user + session['cart_id']; they do not call jwt_required().
 This bridge decodes Authorization: Bearer without relying on session cookies.
 """
-from flask import request
+from flask import current_app, request
 from flask_jwt_extended import decode_token, get_jwt_identity, verify_jwt_in_request
 from flask_login import current_user, login_user
+from sqlalchemy import func
 
 
 def extract_bearer_token():
@@ -20,25 +21,67 @@ def extract_bearer_token():
     return None
 
 
-def _user_from_jwt_token(token):
-    """Decode JWT and load User — does not use @jwt_required or session cookies."""
-    if not token:
-        return None
-    try:
-        decoded = decode_token(token)
-    except Exception:
+def _jwt_sub(decoded):
+    if not decoded or not isinstance(decoded, dict):
         return None
     sub = decoded.get('sub')
     if sub is None:
         return None
+    try:
+        return int(sub)
+    except (TypeError, ValueError):
+        return None
+
+
+def _user_from_jwt_token(token):
+    """Decode JWT and load User — does not use @jwt_required or session cookies."""
+    if not token:
+        return None
+
+    user_id = None
+    try:
+        user_id = _jwt_sub(decode_token(token))
+    except Exception:
+        pass
+
+    if user_id is None:
+        try:
+            import jwt
+
+            secret = current_app.config.get('JWT_SECRET_KEY') or current_app.config.get(
+                'SECRET_KEY'
+            )
+            decoded = jwt.decode(
+                token,
+                secret,
+                algorithms=['HS256'],
+                options={'verify_aud': False},
+            )
+            user_id = _jwt_sub(decoded)
+        except Exception:
+            return None
+
+    if user_id is None:
+        return None
+
     from app.models import User
 
-    user = User.query.get(int(sub))
+    user = User.query.get(user_id)
     if not user:
         return None
     if getattr(user, 'status', 'active') != 'active':
         return None
     return user
+
+
+def find_user_by_email(email):
+    """Case-insensitive email lookup (DB may store mixed case from admin import)."""
+    normalized = (email or '').strip().lower()
+    if not normalized:
+        return None
+    from app.models import User
+
+    return User.query.filter(func.lower(User.email) == normalized).first()
 
 
 def sync_flask_login_from_jwt():
