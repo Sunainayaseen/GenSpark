@@ -213,7 +213,7 @@ MIMETYPE_EXTENSIONS = {
 
 # If model confidence (0–100) is below this, do not show a trained-class label —
 # unseen objects often map to the wrong nearest class.
-DISPLAY_CONFIRM_CONFIDENCE_PCT = float(os.getenv('GENSPARK_DISPLAY_CONF_THRESHOLD', '80'))
+DISPLAY_CONFIRM_CONFIDENCE_PCT = float(os.getenv('GENSPARK_DISPLAY_CONF_THRESHOLD', '65'))
 
 
 def _read_image_pixel_size(path: Path):
@@ -323,7 +323,7 @@ def _boxes_to_detections(result, img_w, img_h):
     return detections
 
 
-def _run_yolo_detection(image_path, confidence=0.55):
+def _run_yolo_detection(image_path, confidence=0.35):
     model_path = _detection_model_path()
     if not model_path.exists():
         return None, _public_detection_error(f'Model not found: {model_path}')
@@ -459,9 +459,9 @@ def detect_component():
     storage_ext = '.jpg' if ext in {'.jpe', '.jfif'} else ext
 
     try:
-        confidence = float(request.form.get('conf', 0.55))
+        confidence = float(request.form.get('conf', 0.35))
     except (TypeError, ValueError):
-        confidence = 0.55
+        confidence = 0.35
     confidence = min(max(confidence, 0.1), 0.95)
 
     upload_dir = Path.home() / 'yolov5' / 'genspark_api_uploads'

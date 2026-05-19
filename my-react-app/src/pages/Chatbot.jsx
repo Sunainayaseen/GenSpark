@@ -383,7 +383,9 @@ const Chatbot = () => {
       }
 
       if (components.length === 0) {
-        addBotMessage('I analyzed the image but did not detect mouse, keyboard, monitor, or RAM. Try a clearer photo with the component centered.');
+        addBotMessage(
+          'I analyzed the image but did not detect mouse, keyboard, monitor, or RAM. Upload the component photo directly (not a chat screenshot), with the part centered on a plain background and good lighting.'
+        );
         return;
       }
 
