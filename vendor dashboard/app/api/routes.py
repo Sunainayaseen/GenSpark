@@ -1139,6 +1139,16 @@ def health():
     return r
 
 
+@api_bp.route('/deploy-check', methods=['GET'])
+def deploy_check():
+    """GET /api/deploy-check — confirms Railway is running the JWT change-password build."""
+    return jsonify({
+        'success': True,
+        'change_password_handler': 'manual_bearer_v4',
+        'message': 'If POST /api/change-password still returns Login required, redeploy failed.',
+    })
+
+
 # ---------- Example: POST (create) ----------
 @api_bp.route('/ping', methods=['GET', 'POST'])
 def ping():
@@ -1255,18 +1265,14 @@ def api_admin_login():
 
 
 # ---------- Change password (first login or user-initiated) ----------
+# No @login_required / @jwt_required — auth is manual Bearer + email/OTP fallback below.
 @api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
 def api_change_password():
-    """POST /api/change-password — Bearer JWT via resolve_api_user(); no Flask-Login session required."""
+    """POST /api/change-password — manual Bearer decode, then email + current_password fallback."""
     if request.method == 'OPTIONS':
         r = make_response('', 204)
         r.headers['Access-Control-Max-Age'] = '86400'
         return r
-
-    from app.utils.jwt_session_bridge import find_user_by_email, resolve_api_user
-
-    # First: Authorization Bearer (and optional session) — not @login_required / session-only
-    user = resolve_api_user()
 
     data = request.get_json(silent=True) or {}
     email = (data.get('email') or '').strip()
@@ -1278,30 +1284,36 @@ def api_change_password():
     if len(new_pw) < 6:
         return jsonify({'success': False, 'error': 'New password must be at least 6 characters'}), 400
 
-    if user:
-        if email:
-            by_email = find_user_by_email(email)
-            if by_email and by_email.id != user.id:
-                return jsonify({
-                    'success': False,
-                    'error': 'Email does not match your signed-in account.',
-                }), 403
-        if not user.check_password(current):
-            return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
-    else:
-        if not email:
+    from app.utils.jwt_session_bridge import (
+        find_user_by_email,
+        resolve_change_password_user,
+        user_from_bearer_token_string,
+    )
+
+    user = None
+
+    # 1) Bulletproof manual Bearer extraction (no decorator / session gate)
+    auth_header = (request.headers.get('Authorization') or '').strip()
+    if auth_header.lower().startswith('bearer '):
+        token = auth_header.split(' ', 1)[1].strip()
+        if token:
+            user = user_from_bearer_token_string(token)
+
+    # 2) Email + one-time password from JSON (never return generic "Login required")
+    if user is None:
+        user, err_body, err_status = resolve_change_password_user(email, current)
+        if err_body is not None:
+            return jsonify(err_body), err_status
+    elif email:
+        by_email = find_user_by_email(email)
+        if by_email and by_email.id != user.id:
             return jsonify({
                 'success': False,
-                'error': (
-                    'Authentication required. Sign in again (Bearer token) or provide your account email.'
-                ),
-            }), 401
-        candidate = find_user_by_email(email)
-        if not candidate:
-            return jsonify({'success': False, 'error': 'No account found for this email'}), 404
-        if not candidate.check_password(current):
-            return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
-        user = candidate
+                'error': 'Email does not match your signed-in account.',
+            }), 403
+
+    if not user.check_password(current):
+        return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
 
     user.set_password(new_pw)
     user.must_change_password = False

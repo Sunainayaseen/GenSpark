@@ -33,8 +33,18 @@ def _jwt_sub(decoded):
         return None
 
 
-def _user_from_jwt_token(token):
-    """Decode JWT and load User — does not use @jwt_required or session cookies."""
+def _jwt_secrets_for_decode():
+    """All keys to try (Railway may only set SECRET_KEY or JWT_SECRET_KEY)."""
+    keys = []
+    for name in ('JWT_SECRET_KEY', 'SECRET_KEY'):
+        value = current_app.config.get(name)
+        if value and value not in keys:
+            keys.append(value)
+    return keys
+
+
+def user_from_bearer_token_string(token):
+    """Decode JWT string and load User — no @jwt_required or session cookies."""
     if not token:
         return None
 
@@ -48,18 +58,21 @@ def _user_from_jwt_token(token):
         try:
             import jwt
 
-            secret = current_app.config.get('JWT_SECRET_KEY') or current_app.config.get(
-                'SECRET_KEY'
-            )
-            decoded = jwt.decode(
-                token,
-                secret,
-                algorithms=['HS256'],
-                options={'verify_aud': False},
-            )
-            user_id = _jwt_sub(decoded)
+            for secret in _jwt_secrets_for_decode():
+                try:
+                    decoded = jwt.decode(
+                        token,
+                        secret,
+                        algorithms=['HS256'],
+                        options={'verify_aud': False},
+                    )
+                    user_id = _jwt_sub(decoded)
+                    if user_id is not None:
+                        break
+                except Exception:
+                    continue
         except Exception:
-            return None
+            pass
 
     if user_id is None:
         return None
@@ -72,6 +85,56 @@ def _user_from_jwt_token(token):
     if getattr(user, 'status', 'active') != 'active':
         return None
     return user
+
+
+def _user_from_jwt_token(token):
+    return user_from_bearer_token_string(token)
+
+
+def user_from_authorization_header():
+    """Manual Bearer parse from Authorization (production-safe)."""
+    auth_header = (request.headers.get('Authorization') or '').strip()
+    if not auth_header:
+        return None
+    parts = auth_header.split(None, 1)
+    if len(parts) != 2 or parts[0].lower() != 'bearer':
+        return None
+    return user_from_bearer_token_string(parts[1].strip())
+
+
+def resolve_change_password_user(email, current_password):
+    """
+    Resolve User for POST /api/change-password.
+    1) Authorization: Bearer (manual header parse + JWT decode)
+    2) JSON email + current_password (one-time login password)
+    Never uses @login_required. Returns (user, error_dict, http_status) or (user, None, None).
+    """
+    user = user_from_authorization_header()
+
+    if user is None and email and current_password:
+        candidate = find_user_by_email(email)
+        if not candidate:
+            return None, {
+                'success': False,
+                'error': 'No account found for this email',
+            }, 404
+        if not candidate.check_password(current_password):
+            return None, {
+                'success': False,
+                'error': 'Current password is wrong',
+            }, 400
+        user = candidate
+
+    if user is None:
+        return None, {
+            'success': False,
+            'error': (
+                'Could not verify your account. Use the one-time password you used to log in '
+                '(not the new password), or sign in again.'
+            ),
+        }, 401
+
+    return user, None, None
 
 
 def find_user_by_email(email):
@@ -100,7 +163,7 @@ def resolve_api_user():
     """
     token = extract_bearer_token()
     if token:
-        user = _user_from_jwt_token(token)
+        user = user_from_bearer_token_string(token)
         if user:
             return user
 
