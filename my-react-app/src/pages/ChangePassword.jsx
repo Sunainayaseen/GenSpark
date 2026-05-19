@@ -73,7 +73,11 @@ export default function ChangePassword() {
       updateUser({ must_change_password: false });
       navigate('/', { replace: true });
     } catch (err) {
-      const msg = err?.data?.error || err?.message || 'Network error.';
+      let msg = err?.data?.error || err?.message || 'Network error.';
+      if (String(msg).toLowerCase().includes('login required')) {
+        msg =
+          'The live API is still on an old build (session-only password change). Redeploy Railway from latest main, then use your one-time login password in Current password.';
+      }
       setError(msg);
     } finally {
       setLoading(false);

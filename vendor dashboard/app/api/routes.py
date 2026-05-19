@@ -1162,7 +1162,11 @@ def ping():
     if request.method == 'POST':
         body = request.get_json(silent=True) or {}
         return jsonify({'success': True, 'message': 'pong', 'received': body})
-    return jsonify({'success': True, 'message': 'pong'})
+    return jsonify({
+        'success': True,
+        'message': 'pong',
+        'api_build': 'email_otp_direct_v6',
+    })
 
 
 # ---------- React App.jsx calls this on load – 404 fix ----------
