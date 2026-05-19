@@ -1147,7 +1147,8 @@ def deploy_check():
     return jsonify({
         'success': True,
         'auth_system': 'production_railway_v6',
-        'change_password_handler': 'email_otp_direct',
+        'change_password_handler': 'force_update_password',
+        'password_update_path': '/api/force-update-password',
         'verify_email_base': PRODUCTION_VERIFY_EMAIL_API_BASE,
         'verify_email_sample': build_verify_email_url('deploy-check-sample'),
         'api_base': PRODUCTION_VERIFY_EMAIL_API_BASE,
@@ -1165,7 +1166,7 @@ def ping():
     return jsonify({
         'success': True,
         'message': 'pong',
-        'api_build': 'email_otp_direct_v6',
+        'api_build': 'force_update_password_v7',
     })
 
 
@@ -1274,21 +1275,8 @@ def api_admin_login():
     })
 
 
-# ---------- Change password (first login or user-initiated) ----------
-# No auth decorators — email + current_password (OTP) verified directly against the database.
-@api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
-def api_change_password():
-    """POST /api/change-password — JSON { email, current_password, new_password }."""
-    if request.method == 'OPTIONS':
-        r = make_response('', 204)
-        r.headers['Access-Control-Max-Age'] = '86400'
-        return r
-
-    data = request.get_json(silent=True) or {}
-    email = (data.get('email') or '').strip()
-    current_otp = data.get('current_password') or ''
-    new_password = data.get('new_password') or ''
-
+def _update_password_from_email_otp(email, current_otp, new_password):
+    """Shared logic: verify email + current OTP, set new password hash. No auth decorators."""
     if not email:
         return jsonify({'success': False, 'error': 'Email is required'}), 400
     if not current_otp or not new_password:
@@ -1311,6 +1299,38 @@ def api_change_password():
     user.must_change_password = False
     db.session.commit()
     return jsonify({'success': True, 'message': 'Password updated'})
+
+
+# ---------- Change password (legacy path — prefer /force-update-password) ----------
+@api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
+def api_change_password():
+    """POST /api/change-password — legacy; use /api/force-update-password on production."""
+    if request.method == 'OPTIONS':
+        r = make_response('', 204)
+        r.headers['Access-Control-Max-Age'] = '86400'
+        return r
+    data = request.get_json(silent=True) or {}
+    return _update_password_from_email_otp(
+        (data.get('email') or '').strip(),
+        data.get('current_password') or '',
+        data.get('new_password') or '',
+    )
+
+
+# Open endpoint — no JWT/session; bypasses old production middleware on /change-password.
+@api_bp.route('/force-update-password', methods=['POST', 'OPTIONS'])
+def force_update_password():
+    """POST /api/force-update-password — JSON { email, current_password, new_password }."""
+    if request.method == 'OPTIONS':
+        r = make_response('', 204)
+        r.headers['Access-Control-Max-Age'] = '86400'
+        return r
+    data = request.get_json(silent=True) or {}
+    return _update_password_from_email_otp(
+        (data.get('email') or '').strip(),
+        data.get('current_password') or '',
+        data.get('new_password') or '',
+    )
 
 
 # ---------- Registration (frontend) + email verification ----------

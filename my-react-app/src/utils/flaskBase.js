@@ -131,5 +131,5 @@ export function getFlaskApiLoginUrl() {
 }
 
 export function getFlaskChangePasswordUrl() {
-  return getApiUrl('/change-password');
+  return getApiUrl('/force-update-password');
 }

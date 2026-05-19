@@ -8,8 +8,8 @@ def _api_sync_jwt_to_session():
     """Let Bearer JWT satisfy Flask-Login on API routes (production cross-origin cart)."""
     if request.method == 'OPTIONS':
         return None
-    # change-password uses email + OTP only — no session/JWT bridge
-    if request.endpoint == 'api.api_change_password':
+    # Password update routes use email + OTP only — no session/JWT bridge
+    if request.endpoint in ('api.api_change_password', 'api.force_update_password'):
         return None
     from app.utils.jwt_session_bridge import sync_flask_login_from_jwt
 

@@ -64,7 +64,7 @@ export async function registerWithApi({ name, email, role }) {
  * @returns {{ success: boolean, message?: string }}
  */
 export async function changePasswordWithApi({ email, current_password, new_password }) {
-  return dashboardPost('/change-password', {
+  return dashboardPost('/force-update-password', {
     email: String(email || '').trim(),
     current_password,
     new_password,
