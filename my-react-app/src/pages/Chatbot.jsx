@@ -641,14 +641,6 @@ const Chatbot = () => {
                   <span className="chat-camera-panel-live">LIVE</span>
                 </div>
               </div>
-              <label className="chat-camera-panel-live-toggle">
-                <input
-                  type="checkbox"
-                  checked={liveDetectOn}
-                  onChange={(e) => setLiveDetectOn(e.target.checked)}
-                />
-                <span>Auto overlay (refreshes ~every 3s via API)</span>
-              </label>
               <div className="chat-camera-panel-actions">
                 <button type="button" className="chat-camera-panel-detect" onClick={handleCameraCapture}>
                   Detect components

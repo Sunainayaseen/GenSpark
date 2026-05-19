@@ -1168,24 +1168,6 @@
   z-index: 3;
 }
 
-.chat-camera-panel-live-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem var(--spacing-lg) 0;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-
-.chat-camera-panel-live-toggle input {
-  width: 1rem;
-  height: 1rem;
-  accent-color: var(--primary);
-  cursor: pointer;
-}
-
 .chat-camera-panel-live {
   display: inline-block;
   padding: 4px 8px;
