@@ -1353,8 +1353,8 @@ def api_register():
     verify_url = None
     try:
         token = _generate_email_token(user.email)
-        from app.utils.urls import get_api_base_url
-        verify_url = f'{get_api_base_url()}/api/verify-email?token={token}'
+        from app.utils.urls import build_api_url
+        verify_url = build_api_url(f'/verify-email?token={token}')
         send_registration_verification_email(
             to_email=user.email,
             name=user.name,
