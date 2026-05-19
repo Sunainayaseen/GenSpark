@@ -10,9 +10,26 @@ const VERCEL_HOST_RE = /vercel\.app/i;
  * API origin for JSON calls (no trailing slash).
  * Production builds always use Railway unless VITE_API_BASE is another non-Vercel API URL.
  */
+const LOCAL_DEV_API = 'http://127.0.0.1:5000';
+
+function isLocalDevFrontend() {
+  if (import.meta.env.PROD || typeof window === 'undefined') return false;
+  const host = window.location.hostname || '';
+  return /^localhost$|^127\.0\.0\.1$/i.test(host);
+}
+
 export function getApiBase() {
   const railway = RAILWAY_API_BASE.replace(/\/$/, '');
   const fromEnv = import.meta.env?.VITE_API_BASE?.replace(/\/$/, '');
+
+  // Vite on localhost: use local Flask (YOLO weights in vendor dashboard/models/best.pt)
+  if (isLocalDevFrontend()) {
+    if (fromEnv && LOCAL_API_PATTERN.test(fromEnv)) {
+      return fromEnv;
+    }
+    // Ignore .env pointing at Railway during local dev — detection needs your machine
+    return LOCAL_DEV_API;
+  }
 
   if (import.meta.env.PROD && typeof window !== 'undefined') {
     const host = window.location.hostname || '';

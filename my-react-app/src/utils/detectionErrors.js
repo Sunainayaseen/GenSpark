@@ -32,6 +32,15 @@ export function formatDetectionError(raw) {
     lower.includes('network') ||
     lower.includes('load failed')
   ) {
+    const onLocal =
+      typeof window !== 'undefined' &&
+      /^localhost$|^127\.0\.0\.1$/i.test(window.location.hostname || '');
+    if (onLocal) {
+      return (
+        'Could not reach the local GenSpark API. Start the Flask backend from the **vendor dashboard** folder ' +
+        '(e.g. `python run.py` on port 5000), then try the image again.'
+      );
+    }
     return 'Could not reach the GenSpark server. Check your internet connection and try again.';
   }
 
