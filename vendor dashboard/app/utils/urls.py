@@ -6,6 +6,10 @@ from flask import current_app
 
 # Railway Flask API — used for /api/verify-email and other backend links in email
 DEFAULT_PRODUCTION_API_URL = 'https://genspark-production.up.railway.app'
+LOCAL_API_URL = 'http://127.0.0.1:5000'
+
+# Email verification links MUST use this host in production (never Vercel SPA).
+PRODUCTION_VERIFY_EMAIL_API_BASE = DEFAULT_PRODUCTION_API_URL
 
 # Host fragments that must never be used as the API base (frontend / Vite)
 _FRONTEND_HOST_MARKERS = (
@@ -27,6 +31,13 @@ def _is_cloud():
         or os.getenv('RENDER')
         or os.getenv('PORT')
     )
+
+
+def _is_production_deploy():
+    """True on Railway/production — verification links must use Railway API base."""
+    if os.getenv('FLASK_ENV', '').strip().lower() == 'production':
+        return True
+    return _is_cloud()
 
 
 def _is_frontend_origin(url: str) -> bool:
@@ -58,6 +69,9 @@ def get_api_base_url():
     Backend origin for /api/* links in emails (verification, etc.).
     Never uses the Vercel frontend URL even if PREFERRED_URL is misconfigured.
     """
+    if _is_production_deploy():
+        return DEFAULT_PRODUCTION_API_URL
+
     explicit = _explicit_backend_url()
     if explicit:
         return explicit
@@ -66,7 +80,7 @@ def get_api_base_url():
     if preferred and _is_frontend_origin(preferred):
         try:
             current_app.logger.warning(
-                'PREFERRED_URL is a frontend host (%s); using Railway API URL for email/API links.',
+                'PREFERRED_URL is a frontend host (%s); using local API URL for email/API links.',
                 preferred,
             )
         except RuntimeError:
@@ -74,9 +88,34 @@ def get_api_base_url():
         preferred = ''
 
     if not preferred:
-        preferred = DEFAULT_PRODUCTION_API_URL if _is_cloud() else 'http://127.0.0.1:5000'
+        preferred = LOCAL_API_URL
 
     return preferred.rstrip('/')
+
+
+def build_verify_email_url(token: str) -> str:
+    """
+    Absolute URL for GET /api/verify-email — always Flask on Railway in production.
+
+    Production/Railway: hardcoded PRODUCTION_VERIFY_EMAIL_API_BASE (never Vercel, never PREFERRED_URL).
+    Local dev: http://127.0.0.1:5000 (or VERIFY_EMAIL_API_BASE if set and not a frontend host).
+    """
+    if not token:
+        raise ValueError('token required for verify-email URL')
+
+    if _is_production_deploy():
+        base = PRODUCTION_VERIFY_EMAIL_API_BASE
+    else:
+        override = (os.getenv('VERIFY_EMAIL_API_BASE') or '').strip().rstrip('/')
+        if override and not _is_frontend_origin(override):
+            base = override
+        else:
+            base = LOCAL_API_URL
+
+    url = f'{base.rstrip("/")}/api/verify-email?token={token}'
+    if _is_frontend_origin(url):
+        raise ValueError('verify-email URL must not use the frontend host')
+    return url
 
 
 def get_frontend_url():

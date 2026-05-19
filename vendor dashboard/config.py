@@ -131,7 +131,7 @@ class Config:
     MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', MAIL_USERNAME or 'noreply@genspark.com')
-    # Backend (Flask/Railway) — OAuth callbacks; verify-email uses get_api_base_url()
+    # Backend (Flask/Railway) — OAuth callbacks; verify-email uses build_verify_email_url()
     PREFERRED_URL = (
         (os.getenv('PREFERRED_URL') or '').strip()
         or (
@@ -142,6 +142,11 @@ class Config:
     )
     # Optional override when PREFERRED_URL was set to Vercel by mistake
     API_BASE_URL = (os.getenv('API_BASE_URL') or os.getenv('BACKEND_URL') or '').strip()
+    # Hardcoded Railway host for registration verify-email (see build_verify_email_url)
+    VERIFY_EMAIL_API_BASE = os.getenv(
+        'VERIFY_EMAIL_API_BASE',
+        'https://genspark-production.up.railway.app',
+    ).strip()
     # React (Vercel) — OAuth redirect target only; not used for verify-email links
     FRONTEND_URL = os.getenv('FRONTEND_URL', '')
     GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')

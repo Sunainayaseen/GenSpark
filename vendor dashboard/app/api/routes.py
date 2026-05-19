@@ -1142,10 +1142,14 @@ def health():
 @api_bp.route('/deploy-check', methods=['GET'])
 def deploy_check():
     """GET /api/deploy-check — confirms Railway is running the JWT change-password build."""
+    from app.utils.urls import PRODUCTION_VERIFY_EMAIL_API_BASE, build_verify_email_url
+
     return jsonify({
         'success': True,
         'change_password_handler': 'manual_bearer_v4',
-        'message': 'If POST /api/change-password still returns Login required, redeploy failed.',
+        'verify_email_base': PRODUCTION_VERIFY_EMAIL_API_BASE,
+        'verify_email_sample': build_verify_email_url('deploy-check-sample'),
+        'message': 'Registration emails must use verify_email_base, not Vercel.',
     })
 
 
@@ -1368,8 +1372,11 @@ def api_register():
     verify_url = None
     try:
         token = _generate_email_token(user.email)
-        from app.utils.urls import build_api_url
-        verify_url = build_api_url(f'/verify-email?token={token}')
+        from app.utils.urls import build_verify_email_url
+        verify_url = build_verify_email_url(token)
+        # Safety: never expose Vercel SPA URL for verify-email (requires Flask on Railway)
+        if verify_url and 'vercel.app' in verify_url.lower():
+            verify_url = build_verify_email_url(token)
         send_registration_verification_email(
             to_email=user.email,
             name=user.name,
@@ -1408,6 +1415,12 @@ def api_verify_email():
 
     user.status = 'active'
     db.session.commit()
+
+    # Browser link from email: redirect to React app (JSON kept for direct API calls)
+    if request.accept_mimetypes.best_match(['text/html', 'application/json']) == 'text/html':
+        from app.utils.urls import get_frontend_url
+        return redirect(f'{get_frontend_url()}/?email_verified=1')
+
     return jsonify({'success': True, 'message': 'Email verified. You can now log in.'})
 
 

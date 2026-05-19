@@ -19,28 +19,42 @@ export function getApiBase() {
   return base;
 }
 
+const FRONTEND_HOST_RE =
+  /(?:^|\.)vercel\.app$|^localhost$|^127\.0\.0\.1$/i;
+
 /**
- * Rewrites localhost API links to the live API base without altering path or query
- * (preserves the full email verification token in ?token=...).
+ * Rewrites frontend/localhost verify links to the Railway API base.
+ * Preserves the full ?token=... query (never truncate).
  */
 export function normalizeVerificationUrl(rawUrl) {
   if (rawUrl == null) return rawUrl;
   const url = String(rawUrl).trim();
   if (!url) return url;
 
-  const apiBase = getApiBase();
+  const apiBase = getApiBase().replace(/\/$/, '');
+
+  const toApiUrl = (pathname, search = '', hash = '') => {
+    let path = pathname || '/api/verify-email';
+    if (!path.startsWith('/api/')) {
+      path = path.startsWith('/') ? `/api${path}` : `/api/${path}`;
+    }
+    return `${apiBase}${path}${search}${hash}`;
+  };
 
   try {
     const parsed = new URL(url);
-    const isLocal =
-      /^https?:\/\/(?:127\.0\.0\.1|localhost):5000$/i.test(parsed.origin);
-    if (isLocal) {
-      return `${apiBase}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    const isLocal = /^https?:\/\/(?:127\.0\.0\.1|localhost):5000$/i.test(parsed.origin);
+    const isFrontend = FRONTEND_HOST_RE.test(parsed.hostname);
+    if (isLocal || isFrontend) {
+      return toApiUrl(parsed.pathname, parsed.search, parsed.hash);
     }
     return parsed.href;
   } catch (_) {
     if (url.startsWith('/')) {
-      return `${apiBase}${url}`;
+      const q = url.indexOf('?');
+      const path = q >= 0 ? url.slice(0, q) : url;
+      const search = q >= 0 ? url.slice(q) : '';
+      return toApiUrl(path, search);
     }
   }
 
