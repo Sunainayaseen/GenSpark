@@ -1146,8 +1146,8 @@ def deploy_check():
 
     return jsonify({
         'success': True,
-        'auth_system': 'production_railway_v5',
-        'change_password_handler': 'bearer_or_email_otp',
+        'auth_system': 'production_railway_v6',
+        'change_password_handler': 'email_otp_direct',
         'verify_email_base': PRODUCTION_VERIFY_EMAIL_API_BASE,
         'verify_email_sample': build_verify_email_url('deploy-check-sample'),
         'api_base': PRODUCTION_VERIFY_EMAIL_API_BASE,
@@ -1271,7 +1271,7 @@ def api_admin_login():
 
 
 # ---------- Change password (first login or user-initiated) ----------
-# No @login_required / @jwt_required — Bearer header + email/OTP only (see jwt_session_bridge).
+# No auth decorators — email + current_password (OTP) verified directly against the database.
 @api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
 def api_change_password():
     """POST /api/change-password — JSON { email, current_password, new_password }."""
@@ -1282,35 +1282,28 @@ def api_change_password():
 
     data = request.get_json(silent=True) or {}
     email = (data.get('email') or '').strip()
-    current = data.get('current_password') or ''
-    new_pw = data.get('new_password') or ''
+    current_otp = data.get('current_password') or ''
+    new_password = data.get('new_password') or ''
 
-    if not current or not new_pw:
+    if not email:
+        return jsonify({'success': False, 'error': 'Email is required'}), 400
+    if not current_otp or not new_password:
         return jsonify({'success': False, 'error': 'Current and new password required'}), 400
-    if len(new_pw) < 6:
+    if len(new_password) < 6:
         return jsonify({'success': False, 'error': 'New password must be at least 6 characters'}), 400
 
-    from app.utils.jwt_session_bridge import (
-        find_user_by_email,
-        resolve_change_password_user_from_request,
-    )
+    from app.utils.jwt_session_bridge import find_user_by_email
 
-    user, err_body, err_status = resolve_change_password_user_from_request(email, current)
-    if err_body is not None:
-        return jsonify(err_body), err_status
+    user = find_user_by_email(email)
+    if not user:
+        return jsonify({'success': False, 'error': 'No account found for this email'}), 404
+    if not user.check_password(current_otp):
+        return jsonify({
+            'success': False,
+            'error': 'Current password is wrong. Use the one-time password from registration or admin.',
+        }), 400
 
-    if email:
-        by_email = find_user_by_email(email)
-        if by_email and by_email.id != user.id:
-            return jsonify({
-                'success': False,
-                'error': 'Email does not match your signed-in account.',
-            }), 403
-
-    if not user.check_password(current):
-        return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
-
-    user.set_password(new_pw)
+    user.set_password(new_password)
     user.must_change_password = False
     db.session.commit()
     return jsonify({'success': True, 'message': 'Password updated'})
@@ -1341,7 +1334,10 @@ def api_register():
         return jsonify({'success': False, 'error': 'Name and email are required'}), 400
 
     if User.query.filter_by(email=email).first():
-        return jsonify({'success': False, 'error': 'Email already registered'}), 409
+        return jsonify({
+            'success': False,
+            'error': 'Email already registered. Sign in with your password or use Forgot password if needed.',
+        }), 409
 
     role_name = 'vendor' if role_raw == 'vendor' else 'customer'
     role = Role.query.filter_by(name=role_name).first()
