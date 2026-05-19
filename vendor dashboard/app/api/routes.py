@@ -1267,12 +1267,9 @@ def api_change_password():
     current = data.get('current_password') or ''
     new_pw = data.get('new_password') or ''
 
-    user = None
-    jwt_user_id = get_jwt_identity()
-    if jwt_user_id is not None:
-        user = User.query.get(int(jwt_user_id))
-    elif current_user.is_authenticated:
-        user = User.query.get(current_user.id)
+    from app.utils.jwt_session_bridge import resolve_api_user
+
+    user = resolve_api_user()
 
     # Vercel → Railway: no session cookie; first-login OTP change via email + current password
     if not user:

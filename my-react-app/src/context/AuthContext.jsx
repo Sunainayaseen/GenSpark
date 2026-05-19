@@ -1,10 +1,13 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { getApiUrl } from '../utils/flaskBase';
+import { loginWithApi } from '../api/authApi';
 import {
   loadAuthSession,
   saveAuthSession,
   clearAuthSession,
   getAuthHeaders,
+  publishAuthSession,
+  getStoredToken,
 } from '../utils/authStorage';
 
 const AuthContext = createContext();
@@ -72,13 +75,6 @@ export const AuthProvider = ({ children }) => {
 
       const normalizedStored = normalizeUser(storedUser);
 
-      if (!token) {
-        setUserState(normalizedStored);
-        clearTimeout(timeout);
-        finish();
-        return;
-      }
-
       let serverUser = null;
       try {
         serverUser = await Promise.race([
@@ -91,9 +87,25 @@ export const AuthProvider = ({ children }) => {
 
       if (cancelled) return;
 
+      // No JWT: still try cookie session (/me). Production needs token for cart API.
+      if (!token) {
+        if (serverUser) {
+          setUserState(serverUser);
+          saveAuthSession(serverUser, null);
+        } else if (serverUser === false) {
+          setUserState(null);
+          clearAuthSession();
+        } else {
+          setUserState(normalizedStored);
+        }
+        clearTimeout(timeout);
+        finish();
+        return;
+      }
+
       if (serverUser) {
+        publishAuthSession(serverUser, token);
         setUserState(serverUser);
-        saveAuthSession(serverUser, token);
       } else if (serverUser === false) {
         if (normalizedStored?.must_change_password) {
           setUserState(normalizedStored);
@@ -115,24 +127,39 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  const establishSession = (rawUser, token) => {
+    const jwt = token || rawUser?.token || rawUser?.access_token || rawUser?.jwt || null;
+    const { token: _t, access_token: _a, jwt: _j, ...rest } = rawUser || {};
+    const normalized = normalizeUser(rest);
+    if (!normalized) return false;
+    publishAuthSession(normalized, jwt);
+    setUserState(normalized);
+    setAuthReady(true);
+    return Boolean(jwt);
+  };
+
   const login = (userOrEmail, passwordOrNull, role = 'buyer') => {
     if (userOrEmail && typeof userOrEmail === 'object' && userOrEmail.email) {
-      const { token, ...rest } = userOrEmail;
-      const normalized = normalizeUser(rest);
-      setUserState(normalized);
-      saveAuthSession(normalized, token || null);
-      setAuthReady(true);
+      establishSession(userOrEmail, userOrEmail.token || userOrEmail.access_token || userOrEmail.jwt);
       return;
     }
-    const normalized = normalizeUser({
-      email: userOrEmail,
-      name: String(userOrEmail).split('@')[0],
-      role: role || 'buyer',
-      id: Date.now().toString(),
-    });
-    setUserState(normalized);
-    saveAuthSession(normalized, null);
-    setAuthReady(true);
+    if (import.meta.env.DEV) {
+      const normalized = normalizeUser({
+        email: userOrEmail,
+        name: String(userOrEmail).split('@')[0],
+        role: role || 'buyer',
+        id: Date.now().toString(),
+      });
+      setUserState(normalized);
+      saveAuthSession(normalized, null);
+      setAuthReady(true);
+    }
+  };
+
+  const loginFromApi = async (email, password) => {
+    const { user, token } = await loginWithApi(email, password);
+    establishSession(user, token);
+    return { user: normalizeUser(user), token: getStoredToken() };
   };
 
   const signup = (name, email, password, role = 'buyer') => {
@@ -163,7 +190,9 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        token: getStoredToken(),
         login,
+        loginFromApi,
         signup,
         logout,
         updateUser,

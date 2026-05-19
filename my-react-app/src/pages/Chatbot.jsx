@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import chatbotHeaderLogo from '../assets/genspark-gs-circuit-logo.png';
 import ImageDetectOverlay from '../components/ImageDetectOverlay';
 import { getApiUrl } from '../utils/flaskBase';
+import { formatDetectionError } from '../utils/detectionErrors';
 
 import './Chatbot.css';
 
@@ -23,7 +24,7 @@ const postDetectComponent = async (file, options = {}) => {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok || !data.success) {
-    throw new Error(data.error || 'Component detection failed.');
+    throw new Error(formatDetectionError(data.error || 'Component detection failed.'));
   }
 
   return data;
@@ -389,7 +390,7 @@ const Chatbot = () => {
       addBotMessage(`Detection complete: ${summary}.`, { type: 'detection', components });
     } catch (error) {
       if (options.cameraOverlay) setCameraPreviewOverlay(null);
-      addBotMessage(error.message || 'Detection failed. Make sure the Flask backend is running and the trained best.pt model exists.');
+      addBotMessage(formatDetectionError(error.message));
     } finally {
       setDetectionLoading(false);
       setIsTyping(false);

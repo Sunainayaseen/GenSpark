@@ -5,7 +5,7 @@ import { SITE_LOGO_SRC } from '../branding';
 import './AuthModal.css';
 
 const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin }) => {
-  const { login } = useAuth();
+  const { login, loginFromApi } = useAuth();
   const [mode, setMode] = useState(initialMode);
   const [registrationSuccess, setRegistrationSuccess] = useState(null);
 
@@ -44,25 +44,23 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
     e.preventDefault();
     setFlaskError('');
     if (mode === 'login') {
-      if (onFlaskLogin) {
-        setFlaskLoading(true);
-        try {
-          const userFromApi = await onFlaskLogin(formData.email, formData.password);
-          if (userFromApi && userFromApi.email) {
-            login(userFromApi);
-          } else {
-            login(formData.email, formData.password, role);
+      setFlaskLoading(true);
+      try {
+        if (onFlaskLogin) {
+          const result = await onFlaskLogin(formData.email, formData.password);
+          if (!result?.email) {
+            throw new Error('Login failed — no user returned from API.');
           }
-          onClose();
-        } catch (err) {
-          setFlaskError(err.message || 'Login failed');
-        } finally {
-          setFlaskLoading(false);
+          login(result);
+        } else {
+          await loginFromApi(formData.email, formData.password);
         }
-        return;
+        onClose();
+      } catch (err) {
+        setFlaskError(err.message || 'Login failed');
+      } finally {
+        setFlaskLoading(false);
       }
-      login(formData.email, formData.password, role);
-      onClose();
       return;
     }
 

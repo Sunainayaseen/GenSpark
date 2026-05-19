@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { getApiUrl, getFlaskApiLoginUrl, getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
+import { loginWithApi } from '../api/authApi';
+import { getApiUrl, getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
 import { getAuthHeaders } from '../utils/authStorage';
 import HeaderSearch from './HeaderSearch';
 import AuthModal from './AuthModal';
@@ -98,7 +99,7 @@ const Layout = ({ children }) => {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.user) {
-          login(data.user);
+          login({ ...data.user, token: data.token });
         }
       })
       .finally(() => {
@@ -324,56 +325,28 @@ const Layout = ({ children }) => {
         onClose={() => setAuthModalOpen(false)}
         mode={authMode}
         onFlaskLogin={async (email, password) => {
-          const body = JSON.stringify({ email, password });
-          const opts = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-            credentials: 'include',
-          };
-          let flaskUrl = getFlaskApiLoginUrl();
-          let res;
           try {
-            res = await fetch(flaskUrl, opts);
-          } catch (firstErr) {
-            const fallbackBase = getFlaskBaseFallback();
-            const altUrl = fallbackBase && fallbackBase !== getFlaskBase() ? `${fallbackBase}/api/login` : null;
-            if (altUrl) {
-              try {
-                res = await fetch(altUrl, opts);
-                flaskUrl = altUrl;
-                setFlaskBaseUsed(fallbackBase);
-              } catch (secondErr) {
-                throw new Error(
-                  'Cannot reach the GenSpark API. Check your connection or try again later.'
-                );
-              }
-            } else {
+            const { user, token } = await loginWithApi(email, password);
+            if (location.pathname === '/vendor/dashboard') {
+              window.dispatchEvent(new CustomEvent('flask-vendor-login-success'));
+            } else if (location.pathname === '/admin') {
+              window.dispatchEvent(new CustomEvent('flask-admin-login-success'));
+            }
+            return { ...user, token };
+          } catch (err) {
+            if (err?.message?.includes('Cannot reach') || err?.message?.includes('Failed to fetch')) {
               throw new Error(
                 'Cannot reach the GenSpark API. Check your connection or try again later.'
               );
             }
-          }
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            const err = data.error || data.message || 'Login failed';
-            if (res.status === 401 || (err && (err.includes('Invalid') || err === 'Login failed'))) {
-              const isVendor = location.pathname === '/vendor/dashboard';
+            const isVendor = location.pathname === '/vendor/dashboard';
+            if (isVendor && err?.message?.includes('Invalid')) {
               throw new Error(
-                isVendor
-                  ? 'Invalid credentials or vendor account not configured. Please verify your login details or initialize demo data and try again.'
-                  : 'Invalid email or password. Please verify your credentials and try again.'
+                'Invalid credentials or vendor account not configured. Please verify your login details or initialize demo data and try again.'
               );
             }
-            throw new Error(err);
+            throw err;
           }
-          if (location.pathname === '/vendor/dashboard') {
-            window.dispatchEvent(new CustomEvent('flask-vendor-login-success'));
-          } else if (location.pathname === '/admin') {
-            window.dispatchEvent(new CustomEvent('flask-admin-login-success'));
-          }
-          if (!data.user) return null;
-          return data.token ? { ...data.user, token: data.token } : data.user;
         }}
       />
 

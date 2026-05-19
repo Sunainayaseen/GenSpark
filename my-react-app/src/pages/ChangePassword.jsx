@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getApiUrl } from '../utils/flaskBase';
+import { dashboardPost } from '../api/dashboardApi';
 import { getStoredToken, loadAuthSession } from '../utils/authStorage';
 import './ChangePassword.css';
 
 export default function ChangePassword() {
-  const { user, updateUser, authReady } = useAuth();
+  const { user, updateUser, authReady, token: contextToken } = useAuth();
   const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -58,7 +58,7 @@ export default function ChangePassword() {
       return;
     }
 
-    const token = getStoredToken();
+    const token = contextToken || getStoredToken();
     const canUseOtpFallback = Boolean(activeUser?.must_change_password);
 
     if (!token && !canUseOtpFallback) {
@@ -66,37 +66,23 @@ export default function ChangePassword() {
       return;
     }
 
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
     setLoading(true);
     try {
-      const res = await fetch(getApiUrl('/change-password'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          email: activeUser.email,
-          current_password: currentPassword,
-          new_password: newPassword,
-        }),
-        credentials: 'include',
+      const data = await dashboardPost('/change-password', {
+        email: activeUser.email,
+        current_password: currentPassword,
+        new_password: newPassword,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data.error || 'Failed to update password.';
-        setError(
-          msg === 'Login required'
-            ? 'Login required — sign in first, use the one-time password in “Current password”, or redeploy the Railway backend (latest API).'
-            : msg
-        );
+      if (!data?.success) {
+        const msg = data?.error || data?.message || 'Failed to update password.';
+        setError(msg);
         return;
       }
       updateUser({ must_change_password: false });
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err.message || 'Network error.');
+      const msg = err?.data?.error || err?.message || 'Network error.';
+      setError(msg);
     } finally {
       setLoading(false);
     }

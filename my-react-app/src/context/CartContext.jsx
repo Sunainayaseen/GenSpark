@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { dashboardDelete, dashboardGet, dashboardPost, dashboardPut } from '../api/dashboardApi';
+import { AUTH_UPDATED_EVENT, getStoredToken } from '../utils/authStorage';
 
 const CartContext = createContext();
 
@@ -17,7 +18,7 @@ export const CartProvider = ({ children }) => {
   const [vendorGroups, setVendorGroups] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
 
   const [cartLoading, setCartLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -30,45 +31,68 @@ export const CartProvider = ({ children }) => {
     toastTimerRef.current = setTimeout(() => setToast(null), ms);
   };
 
-  const refreshCart = async () => {
+  const mapApiCartItems = (items) =>
+    (Array.isArray(items) ? items : []).map((it) => ({
+      id: it.cart_item_id,
+      product_id: it.component_id,
+      item_type: it.item_type || 'component',
+      title: it.component_name || it.name,
+      name: it.component_name || it.name,
+      price: Number(it.price || 0),
+      image_url: it.image_url,
+      stock: it.stock,
+      quantity: it.quantity,
+      subtotal: Number(it.subtotal || 0),
+      vendor_id: it.vendor_id,
+      vendor_name: it.vendor_name || 'Unassigned',
+      pc_build_id: it.pc_build_id || null,
+    }));
+
+  /** Apply cart payload from POST/PUT responses (same request session as add-to-cart). */
+  const applyCartPayload = (cartPayload) => {
+    if (!cartPayload || typeof cartPayload !== 'object') return false;
+    const items = mapApiCartItems(cartPayload.items);
+    const groups = Array.isArray(cartPayload.vendor_groups) ? cartPayload.vendor_groups : [];
+    setVendorGroups(groups);
+    setServerCartItems(items);
+    return true;
+  };
+
+  const refreshCart = useCallback(async ({ keepOnError = true } = {}) => {
     try {
       setCartLoading(true);
       const res = await dashboardGet('/cart');
-      const items = Array.isArray(res?.cart?.items) ? res.cart.items : [];
-      const groups = Array.isArray(res?.cart?.vendor_groups) ? res.cart.vendor_groups : [];
-      setVendorGroups(groups);
-      setServerCartItems(
-        items.map((it) => ({
-          id: it.cart_item_id,
-          product_id: it.component_id,
-          item_type: it.item_type || 'component',
-          title: it.component_name || it.name,
-          name: it.component_name || it.name,
-          price: Number(it.price || 0),
-          image_url: it.image_url,
-          stock: it.stock,
-          quantity: it.quantity,
-          subtotal: Number(it.subtotal || 0),
-          vendor_id: it.vendor_id,
-          vendor_name: it.vendor_name || 'Unassigned',
-          pc_build_id: it.pc_build_id || null,
-        }))
-      );
+      if (res?.cart) {
+        applyCartPayload(res.cart);
+      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to refresh cart', err);
-      setServerCartItems([]);
-      setVendorGroups([]);
+      if (err?.status === 401) {
+        pushToast('error', 'Please sign in again to view your cart.');
+      }
+      // Do not wipe cart after a successful add — GET /cart can miss session on cross-origin.
+      if (!keepOnError) {
+        setServerCartItems([]);
+        setVendorGroups([]);
+      }
     } finally {
       setCartLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    // Load cart on mount and after login (merge guest cart on backend).
-    refreshCart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+    if (!authReady) return;
+    refreshCart({ keepOnError: false });
+  }, [authReady, user?.id, refreshCart]);
+
+  useEffect(() => {
+    const onAuthUpdated = () => {
+      refreshCart({ keepOnError: false });
+    };
+    window.addEventListener(AUTH_UPDATED_EVENT, onAuthUpdated);
+    return () => window.removeEventListener(AUTH_UPDATED_EVENT, onAuthUpdated);
+  }, [refreshCart]);
 
   const cartItems = useMemo(() => serverCartItems, [serverCartItems]);
 
@@ -94,6 +118,11 @@ export const CartProvider = ({ children }) => {
         vendor_id: product?.vendor_id || null,
       });
       if (!res?.success) throw new Error(res?.error || res?.message || 'Failed to add to cart');
+      // Update navbar count immediately from POST body (same session as add-to-cart).
+      const applied = applyCartPayload(res.cart);
+      if (!applied) {
+        await refreshCart({ keepOnError: true });
+      }
       let msg = 'Added to cart';
       if (res?.assigned_vendor?.shop_name) {
         msg = `Added to cart — vendor: ${res.assigned_vendor.shop_name}`;
@@ -101,7 +130,9 @@ export const CartProvider = ({ children }) => {
         msg = `Added to cart — ${res.assigned_vendors.length} items assigned to vendors`;
       }
       pushToast('success', msg);
-      await refreshCart();
+      if (getStoredToken()) {
+        refreshCart({ keepOnError: true }).catch(() => {});
+      }
       return true;
     } catch (err) {
       const msg = err?.data?.error || err?.data?.message || err.message || 'Add to cart failed';
@@ -114,7 +145,8 @@ export const CartProvider = ({ children }) => {
     try {
       const res = await dashboardDelete('/remove-item', { cart_item_id });
       if (!res?.success) throw new Error(res?.error || res?.message || 'Failed to remove item');
-      await refreshCart();
+      if (!applyCartPayload(res.cart)) await refreshCart();
+      else refreshCart().catch(() => {});
       pushToast('success', 'Item removed');
       return true;
     } catch (err) {
@@ -128,7 +160,8 @@ export const CartProvider = ({ children }) => {
     try {
       const res = await dashboardPut('/update-cart', { cart_item_id, quantity });
       if (!res?.success) throw new Error(res?.error || res?.message || 'Failed to update cart');
-      await refreshCart();
+      if (!applyCartPayload(res.cart)) await refreshCart();
+      else refreshCart().catch(() => {});
       return true;
     } catch (err) {
       const msg = err?.data?.error || err?.data?.message || err.message || 'Update failed';
@@ -141,7 +174,8 @@ export const CartProvider = ({ children }) => {
     try {
       const res = await dashboardPost('/cart/clear', {});
       if (!res?.success) throw new Error(res?.error || res?.message || 'Failed to clear cart');
-      await refreshCart();
+      if (!applyCartPayload(res.cart)) await refreshCart();
+      else refreshCart().catch(() => {});
       pushToast('success', 'Cart cleared');
       return true;
     } catch (err) {

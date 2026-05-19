@@ -11,7 +11,12 @@ const LOCAL_API_PATTERN = /^https?:\/\/(?:127\.0\.0\.1|localhost):5000/i;
  */
 export function getApiBase() {
   const fromEnv = import.meta.env?.VITE_API_BASE?.replace(/\/$/, '');
-  return fromEnv || RAILWAY_API_BASE;
+  const base = fromEnv || RAILWAY_API_BASE;
+  // Production builds must never call localhost if env was misconfigured.
+  if (import.meta.env.PROD && LOCAL_API_PATTERN.test(base)) {
+    return RAILWAY_API_BASE;
+  }
+  return base;
 }
 
 /**

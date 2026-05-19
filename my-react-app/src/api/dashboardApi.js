@@ -1,30 +1,27 @@
 /**
  * API client for GenSpark Flask backend on Railway.
- * Base URL: VITE_API_BASE in .env / .env.production (see src/utils/flaskBase.js).
+ * Resolves base URL + Authorization on every request (no stale localhost/token).
  */
 
 import { getApiPrefix } from '../utils/flaskBase';
 import { getAuthHeaders } from '../utils/authStorage';
 
-const API_PREFIX = getApiPrefix();
-
 async function request(endpoint, options = {}) {
-  const url = `${API_PREFIX}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const apiPrefix = getApiPrefix();
+  const url = `${apiPrefix}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   const config = {
+    ...options,
     headers: getAuthHeaders({
       'Content-Type': 'application/json',
       ...options.headers,
     }),
-    // Needed for Flask session-based carts and auth cookies.
     credentials: 'include',
-    ...options,
   };
   if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
     config.body = JSON.stringify(options.body);
   }
   const res = await fetch(url, config);
   if (!res.ok) {
-    // Read response body once to avoid "body stream already read".
     const raw = await res.text();
     let parsed = null;
     try {
@@ -60,30 +57,18 @@ async function request(endpoint, options = {}) {
   return res.text();
 }
 
-/** GET request to dashboard API */
 export function dashboardGet(endpoint) {
   return request(endpoint, { method: 'GET' });
 }
 
-/** POST request to dashboard API */
 export function dashboardPost(endpoint, body) {
   return request(endpoint, { method: 'POST', body });
 }
 
-/** PUT request to dashboard API */
 export function dashboardPut(endpoint, body) {
   return request(endpoint, { method: 'PUT', body });
 }
 
-/** DELETE request to dashboard API */
 export function dashboardDelete(endpoint, body) {
   return request(endpoint, { method: 'DELETE', body });
 }
-
-// Example usage – adapt endpoints to match your Python dashboard:
-// export async function getDashboardStats() {
-//   return dashboardGet('/stats');
-// }
-// export async function getOrders() {
-//   return dashboardGet('/orders');
-// }

@@ -24,3 +24,23 @@ def sync_flask_login_from_jwt():
     if getattr(user, 'status', 'active') != 'active':
         return
     login_user(user, remember=False)
+
+
+def resolve_api_user():
+    """
+    Resolve User from Bearer JWT and/or Flask-Login session (after sync).
+    Used by routes that declare jwt_required(optional=True) on cross-origin clients.
+    """
+    sync_flask_login_from_jwt()
+    user_id = get_jwt_identity()
+    if user_id is not None:
+        from app.models import User
+
+        user = User.query.get(int(user_id))
+        if user:
+            return user
+    if current_user.is_authenticated:
+        from app.models import User
+
+        return User.query.get(current_user.id)
+    return None
