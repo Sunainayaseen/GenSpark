@@ -1,0 +1,117 @@
+.order-placed-page {
+  padding: calc(var(--spacing-2xl) + 4.5rem) 0 var(--spacing-2xl);
+  min-height: calc(100vh - 120px);
+  background: linear-gradient(180deg, #f0fdf4 0%, #f8fafc 35%, var(--bg-primary) 100%);
+}
+
+.order-placed-container {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.order-placed-card {
+  text-align: center;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  padding: 2.5rem 2rem 2rem;
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.06),
+    0 16px 40px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.15);
+}
+
+.order-placed-icon-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+}
+
+.order-placed-check {
+  width: 5rem;
+  height: 5rem;
+}
+
+.order-placed-check__circle {
+  stroke: #22c55e;
+  stroke-width: 2;
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  animation: order-placed-stroke 0.55s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+.order-placed-check__mark {
+  stroke: #16a34a;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: order-placed-stroke 0.4s cubic-bezier(0.65, 0, 0.45, 1) 0.45s forwards;
+}
+
+@keyframes order-placed-stroke {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.order-placed-title {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.45rem, 4vw, 1.75rem);
+  font-weight: 800;
+  color: var(--primary-dark);
+  letter-spacing: -0.02em;
+}
+
+.order-placed-message {
+  margin: 0 auto 1rem;
+  max-width: 28rem;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.order-placed-ref {
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  display: inline-block;
+}
+
+.order-placed-ref strong {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.order-placed-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.order-placed-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.order-placed-link {
+  margin-top: 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.order-placed-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+  .order-placed-card {
+    padding: 2rem 1.25rem 1.5rem;
+  }
+}

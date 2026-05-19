@@ -286,12 +286,8 @@ const OrderStatus = () => {
             ) : order.status === 'rejected' ? (
               <button type="button" className="btn btn-secondary" disabled>Rejected</button>
             ) : order.status === 'ready_to_dispatch' ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => navigate('/checkout')}
-              >
-                Place order
+              <button type="button" className="btn btn-primary" disabled title="Vendors will ship your order soon">
+                Ready to ship
               </button>
             ) : order.status === 'shipped' ? (
               <button type="button" className="btn btn-secondary" disabled>Shipped</button>
@@ -361,6 +357,11 @@ const OrderStatus = () => {
             ) : (
               <>
                 <p className="os-section__hint">Follow your build from placement through delivery.</p>
+                {order.status === 'ready_to_dispatch' ? (
+                  <p className="os-ready-ship-banner" role="status">
+                    Your build is complete. Vendors will ship to your saved address — you do not need to check out again.
+                  </p>
+                ) : null}
                 <div className="os-stepper-wrap">
                   <div className="os-stepper-track" aria-hidden="true">
                     <div className="os-stepper-fill" style={{ width: stepperFillWidth }} />

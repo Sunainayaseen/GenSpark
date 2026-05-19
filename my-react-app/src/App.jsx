@@ -24,6 +24,7 @@ const About = lazy(() => import("./pages/About"));
 import ChangePassword from "./pages/ChangePassword";
 const CartPage = lazy(() => import("./pages/CartPage"));
 const Checkout = lazy(() => import("./pages/Checkout"));
+const OrderPlacedSuccess = lazy(() => import("./pages/OrderPlacedSuccess"));
 const EcomCartPage = lazy(() => import("./ecommerce/CartPage"));
 const CheckoutPage = lazy(() => import("./ecommerce/CheckoutPage"));
 const OrderSuccess = lazy(() => import("./ecommerce/OrderSuccess"));
@@ -98,6 +99,7 @@ function AnimatedRoutes() {
       <Route path="/vendor-assignment" element={<VendorAssignment />} />
       <Route path="/cart" element={<CartPage />} />
       <Route path="/checkout" element={<Checkout />} />
+      <Route path="/order-success" element={<OrderPlacedSuccess />} />
       <Route path="/ecom/cart" element={<EcomCartPage />} />
       <Route path="/ecom/checkout" element={<CheckoutPage />} />
       <Route path="/ecom/success" element={<OrderSuccess />} />

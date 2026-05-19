@@ -75,9 +75,16 @@ const Checkout = () => {
         shipping_address: shippingAddress,
       });
 
-      const orderId = res?.order?.id;
-      await clearCart();
-      navigate(`/order/${orderId || ''}`);
+      const placed = res?.order;
+      navigate('/order-success', {
+        replace: true,
+        state: {
+          orderId: placed?.id,
+          orderNumber: placed?.order_number,
+          totalAmount: placed?.total_amount,
+        },
+      });
+      clearCart().catch(() => {});
     } catch (err) {
       // eslint-disable-next-line no-alert
       alert(err?.data?.error || err?.message || 'Order placement failed');
@@ -109,9 +116,14 @@ const Checkout = () => {
           <div className="checkout-empty">
             <h1>Checkout</h1>
             <p>Your cart is empty. Add components or a predefined PC before checkout.</p>
-            <button type="button" className="btn btn-primary" onClick={() => navigate('/builds')}>
-              Browse predefined PCs
-            </button>
+            <div className="checkout-empty-actions">
+              <button type="button" className="btn btn-primary" onClick={() => navigate('/builds')}>
+                Browse predefined PCs
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => navigate('/my-orders')}>
+                View my orders
+              </button>
+            </div>
           </div>
         </div>
       </div>

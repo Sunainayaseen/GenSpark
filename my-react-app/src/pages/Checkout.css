@@ -88,6 +88,14 @@
 
 .checkout-card,
 .checkout-summary,
+.checkout-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
 .checkout-empty,
 .checkout-auth-card {
   border: 1px solid var(--border);
