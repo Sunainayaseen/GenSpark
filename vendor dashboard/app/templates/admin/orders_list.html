@@ -1,4 +1,5 @@
 {% extends "admin/base_admin.html" %}
+{% from 'admin/macros/confirm_modal.html' import shared_confirm_modal, confirm_modal_script %}
 {% block page_title %}Orders{% endblock %}
 {% block breadcrumb %}<li class="breadcrumb-item active">Orders</li>{% endblock %}
 
@@ -51,10 +52,18 @@
           <td class="d-flex align-items-center" style="gap: .5rem;">
             <a href="{{ url_for('admin.order_detail', order_id=o.id) }}" class="btn btn-sm btn-info">View</a>
             {% if o.status in ['pending', 'admin-review'] %}
-            <form method="post" action="{{ url_for('admin.order_approve_generate', order_id=o.id) }}" onsubmit="return confirm('Approve this order and generate vendor orders?');" class="m-0">
+            <form id="form-approve-order-list-{{ o.id }}" method="post" action="{{ url_for('admin.order_approve_generate', order_id=o.id) }}" class="d-none">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm btn-success">Approve &amp; generate</button>
             </form>
+            <button type="button"
+              class="btn btn-sm btn-success"
+              data-genspark-confirm-form="form-approve-order-list-{{ o.id }}"
+              data-genspark-confirm-title="Approve order #{{ o.order_number or o.id }}?"
+              data-genspark-confirm-message="Vendor orders will be generated for this customer order."
+              data-genspark-confirm-label="Yes, Approve"
+              data-genspark-confirm-class="btn-success">
+              Approve &amp; generate
+            </button>
             {% endif %}
           </td>
         </tr>
@@ -65,4 +74,9 @@
     </table>
   </div>
 </div>
+{{ shared_confirm_modal() }}
+{% endblock %}
+
+{% block extra_js %}
+{{ confirm_modal_script() }}
 {% endblock %}

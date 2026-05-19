@@ -316,3 +316,27 @@ body {
 .navbar .nav-link .badge {
   font-size: 0.75rem;
 }
+
+/* Admin confirmation modals (replaces window.confirm) */
+.genspark-confirm-modal .modal-content {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.genspark-confirm-modal .genspark-confirm-icon {
+  line-height: 1;
+}
+
+.genspark-confirm-modal .btn-success {
+  background-color: #16a34a;
+  border-color: #15803d;
+}
+
+.genspark-confirm-modal .btn-success:hover {
+  background-color: #15803d;
+  border-color: #166534;
+}
+
+.genspark-confirm-modal.fade .modal-dialog {
+  transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+}

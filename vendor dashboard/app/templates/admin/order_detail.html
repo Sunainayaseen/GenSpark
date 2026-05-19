@@ -1,4 +1,5 @@
 {% extends "admin/base_admin.html" %}
+{% from 'admin/macros/confirm_modal.html' import confirm_modal, confirm_modal_script %}
 {% block page_title %}Order #{{ order.id }}{% endblock %}
 {% block breadcrumb %}<li class="breadcrumb-item"><a href="{{ url_for('admin.orders_list') }}">Orders</a></li><li class="breadcrumb-item active">Detail</li>{% endblock %}
 
@@ -17,18 +18,43 @@
         <p><strong>Status:</strong> <span class="badge badge-info">{{ order.status | status_label }}</span></p>
         <p><strong>Shipping:</strong> {{ order.shipping_address or '-' }}</p>
         {% if order.status in ['pending', 'admin-review'] %}
-        <form method="post" action="{{ url_for('admin.order_approve_generate', order_id=order.id) }}" onsubmit="return confirm('Approve this order and generate vendor orders now?');" class="mb-2">
+        <form id="form-approve-order-{{ order.id }}" method="post" action="{{ url_for('admin.order_approve_generate', order_id=order.id) }}" class="d-none">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-success btn-sm">Approve &amp; Generate Vendor Orders</button>
         </form>
-        <form method="post" action="{{ url_for('admin.order_reject', order_id=order.id) }}" onsubmit="return confirm('Reject this order? Customer will be notified via status.');">
+        <button type="button" class="btn btn-success btn-sm mb-2" data-toggle="modal" data-target="#modal-approve-order-{{ order.id }}">
+          <i class="fas fa-check-circle mr-1"></i> Approve &amp; Generate Vendor Orders
+        </button>
+        {{ confirm_modal(
+          'modal-approve-order-' ~ order.id,
+          'Approve this order?',
+          'Vendor orders will be generated and the customer will move to the next stage. This action cannot be undone from this screen.',
+          'form-approve-order-' ~ order.id,
+          'Yes, Approve',
+          'btn-success'
+        ) }}
+
+        <form id="form-reject-order-{{ order.id }}" method="post" action="{{ url_for('admin.order_reject', order_id=order.id) }}" class="d-none">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <div class="form-group">
-            <label class="small text-muted">Reason (optional)</label>
-            <input type="text" name="reason" class="form-control form-control-sm" placeholder="Rejection reason">
-          </div>
-          <button type="submit" class="btn btn-danger btn-sm">Reject Order</button>
+          <input type="hidden" name="reason" id="reject-reason-hidden-{{ order.id }}" value="">
         </form>
+        <div class="form-group mb-2">
+          <label class="small text-muted" for="reject-reason-input-{{ order.id }}">Reason (optional)</label>
+          <input type="text" id="reject-reason-input-{{ order.id }}" class="form-control form-control-sm" placeholder="Rejection reason">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" data-toggle="modal" data-target="#modal-reject-order-{{ order.id }}">
+          <i class="fas fa-times-circle mr-1"></i> Reject Order
+        </button>
+        {{ confirm_modal(
+          'modal-reject-order-' ~ order.id,
+          'Reject this order?',
+          'The customer will see the order as rejected. You may add an optional reason above.',
+          'form-reject-order-' ~ order.id,
+          'Yes, Reject',
+          'btn-danger',
+          'text-danger',
+          'reject-reason-input-' ~ order.id,
+          'reject-reason-hidden-' ~ order.id
+        ) }}
         {% endif %}
       </div>
     </div>
@@ -98,3 +124,8 @@
 
 <a href="{{ url_for('admin.orders_list') }}" class="btn btn-secondary mt-2">Back to Orders</a>
 {% endblock %}
+
+{% block extra_js %}
+{{ confirm_modal_script() }}
+{% endblock %}
+
