@@ -114,7 +114,10 @@ def build_verify_email_url(token: str) -> str:
 
     url = f'{base.rstrip("/")}/api/verify-email?token={token}'
     if _is_frontend_origin(url):
-        raise ValueError('verify-email URL must not use the frontend host')
+        if _is_production_deploy():
+            url = f'{PRODUCTION_VERIFY_EMAIL_API_BASE.rstrip("/")}/api/verify-email?token={token}'
+        else:
+            raise ValueError('verify-email URL must not use the frontend host')
     return url
 
 

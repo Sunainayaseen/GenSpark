@@ -102,14 +102,28 @@ def user_from_authorization_header():
     return user_from_bearer_token_string(parts[1].strip())
 
 
-def resolve_change_password_user(email, current_password):
+def resolve_change_password_user_from_request(email, current_password):
     """
-    Resolve User for POST /api/change-password.
-    1) Authorization: Bearer (manual header parse + JWT decode)
-    2) JSON email + current_password (one-time login password)
-    Never uses @login_required. Returns (user, error_dict, http_status) or (user, None, None).
+    Resolve User for POST /api/change-password (no @login_required).
+    1) request.headers.get('Authorization') Bearer → manual JWT decode
+    2) JSON email + current_password (one-time login password / OTP)
+    Returns (user, error_dict, http_status) or (user, None, None).
     """
-    user = user_from_authorization_header()
+    user = None
+
+    auth_header = request.headers.get('Authorization') or ''
+    if auth_header.lower().startswith('bearer '):
+        token = auth_header.split(' ', 1)[1].strip()
+        if token:
+            user = user_from_bearer_token_string(token)
+
+    if user is None:
+        token = extract_bearer_token()
+        if token:
+            user = user_from_bearer_token_string(token)
+
+    if user is None:
+        user = user_from_authorization_header()
 
     if user is None and email and current_password:
         candidate = find_user_by_email(email)
@@ -135,6 +149,10 @@ def resolve_change_password_user(email, current_password):
         }, 401
 
     return user, None, None
+
+
+# Alias for older imports
+resolve_change_password_user = resolve_change_password_user_from_request
 
 
 def find_user_by_email(email):

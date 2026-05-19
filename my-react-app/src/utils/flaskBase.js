@@ -1,30 +1,38 @@
 const FLASK_BASE_KEY = 'genspark_flask_base';
 
-/** Live production API (Railway). Default when VITE_API_BASE is unset. */
+/** Live production API (Railway) — default for all production builds. */
 export const RAILWAY_API_BASE = 'https://genspark-production.up.railway.app';
 
 const LOCAL_API_PATTERN = /^https?:\/\/(?:127\.0\.0\.1|localhost):5000/i;
+const VERCEL_HOST_RE = /vercel\.app/i;
 
 /**
  * API origin for JSON calls (no trailing slash).
- * Set VITE_API_BASE in .env / .env.production (see .env.example).
+ * Production builds always use Railway unless VITE_API_BASE is another non-Vercel API URL.
  */
 export function getApiBase() {
+  const railway = RAILWAY_API_BASE.replace(/\/$/, '');
   const fromEnv = import.meta.env?.VITE_API_BASE?.replace(/\/$/, '');
-  const base = fromEnv || RAILWAY_API_BASE;
-  // Production builds must never call localhost if env was misconfigured.
-  if (import.meta.env.PROD && LOCAL_API_PATTERN.test(base)) {
-    return RAILWAY_API_BASE;
+
+  if (import.meta.env.PROD) {
+    if (fromEnv && !LOCAL_API_PATTERN.test(fromEnv) && !VERCEL_HOST_RE.test(fromEnv)) {
+      return fromEnv;
+    }
+    return railway;
   }
-  return base;
+
+  if (fromEnv && !VERCEL_HOST_RE.test(fromEnv)) {
+    return fromEnv;
+  }
+  return railway;
 }
 
 const FRONTEND_HOST_RE =
   /(?:^|\.)vercel\.app$|^localhost$|^127\.0\.0\.1$/i;
 
 /**
- * Rewrites frontend/localhost verify links to the Railway API base.
- * Preserves the full ?token=... query (never truncate).
+ * Registration verify links must hit Flask on Railway, not the Vercel SPA.
+ * Preserves the full ?token=... query string.
  */
 export function normalizeVerificationUrl(rawUrl) {
   if (rawUrl == null) return rawUrl;
@@ -40,6 +48,21 @@ export function normalizeVerificationUrl(rawUrl) {
     }
     return `${apiBase}${path}${search}${hash}`;
   };
+
+  if (import.meta.env.PROD) {
+    try {
+      const parsed = new URL(url);
+      return toApiUrl(parsed.pathname, parsed.search, parsed.hash);
+    } catch (_) {
+      if (url.startsWith('/')) {
+        const q = url.indexOf('?');
+        const path = q >= 0 ? url.slice(0, q) : url;
+        const search = q >= 0 ? url.slice(q) : '';
+        return toApiUrl(path, search);
+      }
+    }
+    return url.replace(LOCAL_API_PATTERN, apiBase).replace(VERCEL_HOST_RE, apiBase);
+  }
 
   try {
     const parsed = new URL(url);
@@ -61,7 +84,7 @@ export function normalizeVerificationUrl(rawUrl) {
   return url.replace(LOCAL_API_PATTERN, apiBase);
 }
 
-/** @deprecated Use normalizeVerificationUrl — same behavior. */
+/** @deprecated Use normalizeVerificationUrl */
 export function normalizeBackendUrl(url) {
   return normalizeVerificationUrl(url);
 }
@@ -71,18 +94,16 @@ export function getApiPrefix() {
   return `${getApiBase()}/api`;
 }
 
-/** Full URL for an API path, e.g. getApiUrl('/detect/component'). */
+/** Full URL for an API path, e.g. getApiUrl('/login'). */
 export function getApiUrl(path) {
   const p = path.startsWith('/') ? path : `/${path}`;
   return `${getApiPrefix()}${p}`;
 }
 
-/** Flask HTML / OAuth base URL (same host as API). */
 export function getFlaskBase() {
   return getApiBase();
 }
 
-/** Same as getFlaskBase — kept for callers that retry on network failure. */
 export function getFlaskBaseFallback() {
   return getApiBase();
 }

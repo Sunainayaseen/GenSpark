@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { dashboardPost } from '../api/dashboardApi';
+import { changePasswordWithApi } from '../api/authApi';
 import { loadAuthSession } from '../utils/authStorage';
 import './ChangePassword.css';
 
@@ -60,7 +60,7 @@ export default function ChangePassword() {
 
     setLoading(true);
     try {
-      const data = await dashboardPost('/change-password', {
+      const data = await changePasswordWithApi({
         email: activeUser.email,
         current_password: currentPassword,
         new_password: newPassword,

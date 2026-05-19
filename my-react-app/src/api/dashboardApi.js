@@ -1,14 +1,18 @@
 /**
  * API client for GenSpark Flask backend on Railway.
- * Resolves base URL + Authorization on every request (no stale localhost/token).
+ * Every request resolves getApiPrefix() at call time → production uses
+ * https://genspark-production.up.railway.app/api (see flaskBase.js).
  */
 
-import { getApiPrefix } from '../utils/flaskBase';
+import { getApiPrefix, RAILWAY_API_BASE } from '../utils/flaskBase';
 import { getAuthHeaders } from '../utils/authStorage';
+
+export { RAILWAY_API_BASE };
 
 async function request(endpoint, options = {}) {
   const apiPrefix = getApiPrefix();
-  const url = `${apiPrefix}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${apiPrefix}${path}`;
   const config = {
     ...options,
     headers: getAuthHeaders({

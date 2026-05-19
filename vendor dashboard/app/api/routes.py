@@ -1146,10 +1146,12 @@ def deploy_check():
 
     return jsonify({
         'success': True,
-        'change_password_handler': 'manual_bearer_v4',
+        'auth_system': 'production_railway_v5',
+        'change_password_handler': 'bearer_or_email_otp',
         'verify_email_base': PRODUCTION_VERIFY_EMAIL_API_BASE,
         'verify_email_sample': build_verify_email_url('deploy-check-sample'),
-        'message': 'Registration emails must use verify_email_base, not Vercel.',
+        'api_base': PRODUCTION_VERIFY_EMAIL_API_BASE,
+        'message': 'Verify links and API must use api_base, never Vercel.',
     })
 
 
@@ -1269,10 +1271,10 @@ def api_admin_login():
 
 
 # ---------- Change password (first login or user-initiated) ----------
-# No @login_required / @jwt_required — auth is manual Bearer + email/OTP fallback below.
+# No @login_required / @jwt_required — Bearer header + email/OTP only (see jwt_session_bridge).
 @api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
 def api_change_password():
-    """POST /api/change-password — manual Bearer decode, then email + current_password fallback."""
+    """POST /api/change-password — JSON { email, current_password, new_password }."""
     if request.method == 'OPTIONS':
         r = make_response('', 204)
         r.headers['Access-Control-Max-Age'] = '86400'
@@ -1290,25 +1292,14 @@ def api_change_password():
 
     from app.utils.jwt_session_bridge import (
         find_user_by_email,
-        resolve_change_password_user,
-        user_from_bearer_token_string,
+        resolve_change_password_user_from_request,
     )
 
-    user = None
+    user, err_body, err_status = resolve_change_password_user_from_request(email, current)
+    if err_body is not None:
+        return jsonify(err_body), err_status
 
-    # 1) Bulletproof manual Bearer extraction (no decorator / session gate)
-    auth_header = (request.headers.get('Authorization') or '').strip()
-    if auth_header.lower().startswith('bearer '):
-        token = auth_header.split(' ', 1)[1].strip()
-        if token:
-            user = user_from_bearer_token_string(token)
-
-    # 2) Email + one-time password from JSON (never return generic "Login required")
-    if user is None:
-        user, err_body, err_status = resolve_change_password_user(email, current)
-        if err_body is not None:
-            return jsonify(err_body), err_status
-    elif email:
+    if email:
         by_email = find_user_by_email(email)
         if by_email and by_email.id != user.id:
             return jsonify({
@@ -1372,11 +1363,17 @@ def api_register():
     verify_url = None
     try:
         token = _generate_email_token(user.email)
-        from app.utils.urls import build_verify_email_url
+        from app.utils.urls import (
+            PRODUCTION_VERIFY_EMAIL_API_BASE,
+            build_verify_email_url,
+            _is_production_deploy,
+        )
         verify_url = build_verify_email_url(token)
-        # Safety: never expose Vercel SPA URL for verify-email (requires Flask on Railway)
-        if verify_url and 'vercel.app' in verify_url.lower():
-            verify_url = build_verify_email_url(token)
+        if _is_production_deploy():
+            verify_url = (
+                f'{PRODUCTION_VERIFY_EMAIL_API_BASE.rstrip("/")}'
+                f'/api/verify-email?token={token}'
+            )
         send_registration_verification_email(
             to_email=user.email,
             name=user.name,

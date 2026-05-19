@@ -1,6 +1,7 @@
 /**
- * Flask /api/login — always uses production Railway base from flaskBase (VITE_API_BASE).
+ * Auth API — all requests use Railway base from flaskBase (VITE_API_BASE / production default).
  */
+import { dashboardPost } from './dashboardApi';
 import { getApiUrl } from '../utils/flaskBase';
 
 /**
@@ -30,7 +31,9 @@ export async function loginWithApi(email, password) {
       );
     }
     if (res.status === 401) {
-      throw new Error('Invalid email or password. Use the one-time password from registration if this is your first login.');
+      throw new Error(
+        'Invalid email or password. Use the one-time password from registration if this is your first login.'
+      );
     }
     throw new Error(err);
   }
@@ -44,4 +47,26 @@ export async function loginWithApi(email, password) {
   }
 
   return { user: data.user, token };
+}
+
+/**
+ * @returns {{ success: boolean, one_time_password?: string, verification_url?: string, message?: string }}
+ */
+export async function registerWithApi({ name, email, role }) {
+  return dashboardPost('/register', {
+    name: String(name || '').trim(),
+    email: String(email || '').trim().toLowerCase(),
+    role: role === 'vendor' ? 'vendor' : 'customer',
+  });
+}
+
+/**
+ * @returns {{ success: boolean, message?: string }}
+ */
+export async function changePasswordWithApi({ email, current_password, new_password }) {
+  return dashboardPost('/change-password', {
+    email: String(email || '').trim(),
+    current_password,
+    new_password,
+  });
 }

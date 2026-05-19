@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getApiUrl, getFlaskBase, getFlaskBaseFallback, normalizeVerificationUrl, setFlaskBaseUsed } from '../utils/flaskBase';
+import { registerWithApi } from '../api/authApi';
+import { getFlaskBase, getFlaskBaseFallback, normalizeVerificationUrl, setFlaskBaseUsed } from '../utils/flaskBase';
 import { SITE_LOGO_SRC } from '../branding';
 import './AuthModal.css';
 
@@ -70,18 +71,12 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
       if (!formData.name || !formData.email) {
         throw new Error('Name and email are required.');
       }
-      const res = await fetch(getApiUrl('/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          role: role === 'vendor' ? 'vendor' : 'customer',
-        }),
+      const data = await registerWithApi({
+        name: formData.name,
+        email: formData.email,
+        role: role === 'vendor' ? 'vendor' : 'customer',
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
+      if (!data?.success) {
         throw new Error(data.error || data.message || 'Registration failed');
       }
       const otp = data.one_time_password;
