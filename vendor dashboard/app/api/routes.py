@@ -11,7 +11,7 @@ from datetime import datetime
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import jsonify, request, make_response, redirect, session, current_app
 from flask_login import login_user, current_user
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token
 from werkzeug.utils import secure_filename
 from app.api import api_bp
 from app import db
@@ -1257,11 +1257,17 @@ def api_admin_login():
 # ---------- Change password (first login or user-initiated) ----------
 @api_bp.route('/change-password', methods=['POST', 'OPTIONS'])
 def api_change_password():
-    """POST /api/change-password — email + current_password proves identity (no session cookie)."""
+    """POST /api/change-password — Bearer JWT via resolve_api_user(); no Flask-Login session required."""
     if request.method == 'OPTIONS':
         r = make_response('', 204)
         r.headers['Access-Control-Max-Age'] = '86400'
         return r
+
+    from app.utils.jwt_session_bridge import find_user_by_email, resolve_api_user
+
+    # First: Authorization Bearer (and optional session) — not @login_required / session-only
+    user = resolve_api_user()
+
     data = request.get_json(silent=True) or {}
     email = (data.get('email') or '').strip()
     current = data.get('current_password') or ''
@@ -1272,32 +1278,30 @@ def api_change_password():
     if len(new_pw) < 6:
         return jsonify({'success': False, 'error': 'New password must be at least 6 characters'}), 400
 
-    from app.utils.jwt_session_bridge import find_user_by_email, resolve_api_user
-
-    user = None
-
-    # Primary: email + current password (works Vercel → Railway without cookies/JWT)
-    if email:
+    if user:
+        if email:
+            by_email = find_user_by_email(email)
+            if by_email and by_email.id != user.id:
+                return jsonify({
+                    'success': False,
+                    'error': 'Email does not match your signed-in account.',
+                }), 403
+        if not user.check_password(current):
+            return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
+    else:
+        if not email:
+            return jsonify({
+                'success': False,
+                'error': (
+                    'Authentication required. Sign in again (Bearer token) or provide your account email.'
+                ),
+            }), 401
         candidate = find_user_by_email(email)
         if not candidate:
             return jsonify({'success': False, 'error': 'No account found for this email'}), 404
         if not candidate.check_password(current):
             return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
         user = candidate
-
-    if not user:
-        user = resolve_api_user()
-        if user and not user.check_password(current):
-            return jsonify({'success': False, 'error': 'Current password is wrong'}), 400
-
-    if not user:
-        return jsonify({
-            'success': False,
-            'error': (
-                'Could not verify your account. Use the same email you signed in with and '
-                'enter the one-time password you used to log in (not the new password).'
-            ),
-        }), 401
 
     user.set_password(new_pw)
     user.must_change_password = False
@@ -1397,15 +1401,11 @@ def api_verify_email():
 
 # ---------- Current user (for OAuth callback sync on frontend) ----------
 @api_bp.route('/me', methods=['GET'])
-@jwt_required(optional=True)
 def api_me():
     """GET /api/me - Return current user if logged in (session or JWT Bearer)."""
-    user = None
-    jwt_user_id = get_jwt_identity()
-    if jwt_user_id is not None:
-        user = User.query.get(int(jwt_user_id))
-    elif current_user.is_authenticated:
-        user = User.query.get(current_user.id)
+    from app.utils.jwt_session_bridge import resolve_api_user
+
+    user = resolve_api_user()
     if not user:
         return jsonify({'success': False, 'user': None}), 200
     role_name = user.role_ref.name if getattr(user, 'role_ref', None) else 'customer'
