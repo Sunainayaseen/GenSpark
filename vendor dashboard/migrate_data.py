@@ -9,18 +9,21 @@ Default tables (with automatic name resolution):
   components  -> components
   products    -> products, else ecom_products
   prebuilt    -> prebuilt, else pc_builds
-  users, vendors, cart, cart_items (+ FK deps: roles, categories, brands, etc.)
+  users, vendors, cart, cart_items, ecom_carts, ecom_cart_items (+ FK deps)
+
+Note: GenSpark PC builder uses `cart` + `cart_items` (/api/cart).
+The separate e-commerce shop uses `ecom_carts` + `ecom_cart_items` (/api/ecom/cart).
 
 Related FK tables are migrated first automatically (roles before users, users before
-vendors, catalog tables before cart_items, etc.).
+vendors, ecom_products before ecom_cart_items, etc.).
 
 Usage (PowerShell, from vendor dashboard folder):
   pip install pymysql python-dotenv
   $env:RAILWAY_MYSQL_PASSWORD = "your_mysql_root_password"
   python migrate_data.py
 
-Full sync (catalog + vendors + cart):
-  $env:MIGRATE_TABLES = "users,vendors,vendor_components,cart,cart_items,components,products,prebuilt"
+Full sync (catalog + vendors + both cart systems):
+  $env:MIGRATE_TABLES = "users,vendors,vendor_components,cart,cart_items,ecom_carts,ecom_cart_items,components,products,prebuilt"
   python migrate_data.py
 
 Optional env overrides:
@@ -57,6 +60,8 @@ TABLE_ALIASES: dict[str, list[str]] = {
     "vendor_documents": ["vendor_documents"],
     "cart": ["cart"],
     "cart_items": ["cart_items"],
+    "ecom_carts": ["ecom_carts"],
+    "ecom_cart_items": ["ecom_cart_items"],
     "components": ["components"],
     "products": ["products", "ecom_products"],
     "prebuilt": ["prebuilt", "pc_builds"],
@@ -83,6 +88,8 @@ DEPENDENCY_TABLES: dict[str, list[str]] = {
         "build_components",
         "cart",
     ],
+    "ecom_carts": ["roles", "users"],
+    "ecom_cart_items": ["roles", "users", "ecom_carts", "ecom_products"],
 }
 
 MIGRATION_ORDER = [
@@ -101,6 +108,8 @@ MIGRATION_ORDER = [
     "build_components",
     "cart",
     "cart_items",
+    "ecom_carts",
+    "ecom_cart_items",
 ]
 
 
