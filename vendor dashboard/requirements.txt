@@ -23,10 +23,9 @@ Jinja2==3.1.6
 MarkupSafe==3.0.3
 pillow==10.4.0
 
-# --- AI Cloud Optimizations (CPU wheels; smaller/faster on Railway) ---
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-torchvision
+# Pinned for Railway (avoids torch install / version mismatch on deploy)
+torch==2.2.2
+torchvision==0.17.2
 
 ultralytics>=8.3.0
 pycparser==3.0
