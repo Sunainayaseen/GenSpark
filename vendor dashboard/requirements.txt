@@ -23,11 +23,12 @@ Jinja2==3.1.6
 MarkupSafe==3.0.3
 pillow==10.4.0
 
-# Pinned for Railway (avoids torch install / version mismatch on deploy)
-torch==2.2.2
-torchvision==0.17.2
-
+# YOLO / vision — unpinned torch so Railway can install a compatible CPU build
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
 ultralytics>=8.3.0
+opencv-python-headless
 pycparser==3.0
 PyJWT==2.12.1
 PyMySQL==1.1.0
