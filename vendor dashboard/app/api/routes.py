@@ -219,6 +219,9 @@ def _run_yolo_detection(image_source, confidence=0.35):
     import numpy as np
     from PIL import Image as PILImage
 
+    # Always defined (fixes UnboundLocalError if legacy CLI/fallback code paths exist)
+    model_path = resolve_model_path()
+
     try:
         model, model_path = get_yolo_model()
         if isinstance(image_source, PILImage.Image):
