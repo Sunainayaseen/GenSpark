@@ -62,125 +62,14 @@ def _vendor_shop_name(vendor_id):
     return v.shop_name if v else None
 
 
-def _genspark_root():
-    return Path(__file__).resolve().parents[3]
-
-
-def _vendor_dashboard_root():
-    return Path(__file__).resolve().parents[2]
-
-
-def _bundled_model_dir():
-    return _vendor_dashboard_root() / 'models'
-
-
-# Resolved when GENSPARK_YOLO_MODEL is unset: newest weights/best.pt under detect runs.
-_detection_model_cache: Path | None = None
-_detection_model_logged: bool = False
-
-
-def _legacy_detection_model_candidates():
-    """Fixed paths used before auto-discovery (still used as fallback)."""
-    root = _genspark_root()
-    bundled = _bundled_model_dir() / 'best.pt'
-    return [
-        bundled,
-        root / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt',
-        root / 'runs' / 'detect' / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt',
-        root / 'yolov8n.pt',
-        root / 'yolov8n-seg.pt',
-        Path.home() / 'yolov5' / 'runs' / 'detect' / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt',
-    ]
-
-
-def _discover_best_pt_files():
-    """All weights/best.pt files under Ultralytics-style runs/detect trees."""
-    roots = (
-        _genspark_root() / 'runs' / 'detect',
-        Path.home() / 'yolov5' / 'runs' / 'detect',
-    )
-    found: list[Path] = []
-    for base in roots:
-        if not base.is_dir():
-            continue
-        for p in base.rglob('best.pt'):
-            if p.is_file() and p.parent.name == 'weights':
-                found.append(p)
-    return found
+from app.yolo_weights import clear_yolo_model_cache, get_yolo_model, resolve_model_path
 
 
 def _detection_model_path(force_refresh: bool = False) -> Path:
-    """
-    Return path to YOLO weights for CLI inference.
-
-    Priority:
-      1) GENSPARK_YOLO_MODEL — if set and file exists, use it (production pin).
-      2) Cached auto-pick — newest weights/best.pt under GenSpark + ~/yolov5 runs/detect.
-      3) Legacy hard-coded fallbacks (oldest layout).
-    """
-    global _detection_model_cache, _detection_model_logged
-
-    configured = os.getenv('GENSPARK_YOLO_MODEL', '').strip()
-    if configured:
-        p = Path(configured)
-        if p.exists():
-            _detection_model_cache = p
-            if not _detection_model_logged:
-                _detection_model_logged = True
-                try:
-                    current_app.logger.info('YOLO model (GENSPARK_YOLO_MODEL): %s', p)
-                except RuntimeError:
-                    pass
-            return p
-
-    if _detection_model_cache and not force_refresh and _detection_model_cache.exists():
-        return _detection_model_cache
-
-    bundled = _bundled_model_dir() / 'best.pt'
-    if bundled.exists():
-        _detection_model_cache = bundled
-        if not _detection_model_logged:
-            _detection_model_logged = True
-            try:
-                current_app.logger.info('YOLO model (bundled): %s', bundled)
-            except RuntimeError:
-                pass
-        return bundled
-
-    discovered = _discover_best_pt_files()
-    if discovered:
-        latest = max(discovered, key=lambda x: x.stat().st_mtime)
-        _detection_model_cache = latest
-        if not _detection_model_logged:
-            _detection_model_logged = True
-            try:
-                current_app.logger.info(
-                    'YOLO model (auto latest best.pt, mtime): %s', latest
-                )
-            except RuntimeError:
-                pass
-        return latest
-
-    for candidate in _legacy_detection_model_candidates():
-        if candidate.exists():
-            _detection_model_cache = candidate
-            if not _detection_model_logged:
-                _detection_model_logged = True
-                try:
-                    current_app.logger.info('YOLO model (legacy fallback): %s', candidate)
-                except RuntimeError:
-                    pass
-            return candidate
-
-    # Same return shape as before: first fallback path for a clear error message.
-    fallback = Path(configured) if configured else _legacy_detection_model_candidates()[0]
-    return fallback
-
-
-def _invalidate_detection_model_cache():
-    global _detection_model_cache, _detection_model_logged
-    _detection_model_cache = None
-    _detection_model_logged = False
+    """Dynamic path: vendor dashboard/models/best.pt (see app/yolo_weights.py)."""
+    if force_refresh:
+        clear_yolo_model_cache()
+    return resolve_model_path()
 
 
 def _component_name(class_id):
@@ -324,14 +213,8 @@ def _boxes_to_detections(result, img_w, img_h):
 
 
 def _run_yolo_detection(image_path, confidence=0.35):
-    model_path = _detection_model_path()
-    if not model_path.exists():
-        return None, _public_detection_error(f'Model not found: {model_path}')
-
     try:
-        from ultralytics import YOLO
-
-        model = YOLO(str(model_path))
+        model, model_path = get_yolo_model()
         results = model.predict(
             source=str(image_path),
             conf=confidence,
@@ -361,6 +244,8 @@ def _run_yolo_detection(image_path, confidence=0.35):
         }, None
     except ImportError:
         pass
+    except FileNotFoundError as exc:
+        return None, _public_detection_error(str(exc))
     except Exception as exc:
         return None, _public_detection_error(str(exc))
 
@@ -518,7 +403,7 @@ def detect_model_reload():
     if supplied != expected:
         return jsonify({'success': False, 'error': 'Invalid or missing reload key.'}), 403
 
-    _invalidate_detection_model_cache()
+    clear_yolo_model_cache()
     p = _detection_model_path(force_refresh=True)
     return jsonify({
         'success': True,

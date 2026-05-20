@@ -29,6 +29,15 @@ app = create_application()
 # Some platforms look for `application`
 application = app
 
+from app.yolo_weights import MODEL_PATH
+
+print(f'(GenSpark) YOLO MODEL_PATH: {MODEL_PATH} exists={MODEL_PATH.is_file()}')
+if not MODEL_PATH.is_file():
+    print(
+        '(GenSpark) WARNING: models/best.pt missing — '
+        'commit vendor dashboard/models/best.pt and redeploy.'
+    )
+
 
 @app.shell_context_processor
 def make_shell_context():
