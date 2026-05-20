@@ -2,6 +2,9 @@
 import os
 from pathlib import Path
 
+# Headless cloud: writable config/cache (avoids permission errors on Railway)
+os.environ.setdefault('YOLO_CONFIG_DIR', '/tmp/Ultralytics')
+
 # vendor dashboard/ (parent of app/)
 VENDOR_DASHBOARD_ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = VENDOR_DASHBOARD_ROOT / 'models' / 'best.pt'

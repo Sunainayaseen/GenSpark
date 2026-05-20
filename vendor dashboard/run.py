@@ -29,7 +29,7 @@ app = create_application()
 # Some platforms look for `application`
 application = app
 
-from app.yolo_weights import MODEL_PATH
+from app.yolo_weights import MODEL_PATH, get_yolo_model
 
 print(f'(GenSpark) YOLO MODEL_PATH: {MODEL_PATH} exists={MODEL_PATH.is_file()}')
 if not MODEL_PATH.is_file():
@@ -37,6 +37,13 @@ if not MODEL_PATH.is_file():
         '(GenSpark) WARNING: models/best.pt missing — '
         'commit vendor dashboard/models/best.pt and redeploy.'
     )
+else:
+    try:
+        with app.app_context():
+            get_yolo_model()
+        print('(GenSpark) YOLO model preloaded OK (api_version=2)')
+    except Exception as exc:
+        print(f'(GenSpark) YOLO preload failed: {exc}')
 
 
 @app.shell_context_processor

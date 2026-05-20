@@ -216,13 +216,15 @@ def _run_yolo_detection(image_source, confidence=0.35):
     """
     Run YOLO on a file path or PIL Image (webcam base64 / multipart upload).
     """
+    import numpy as np
     from PIL import Image as PILImage
 
     try:
         model, model_path = get_yolo_model()
-        source = image_source
         if isinstance(image_source, PILImage.Image):
             img_w, img_h = image_source.size
+            # ndarray is more reliable than PIL on headless Linux (Railway)
+            source = np.asarray(image_source.convert('RGB'))
         else:
             source = str(image_source)
             img_w, img_h = _read_image_pixel_size(Path(source))
@@ -266,36 +268,54 @@ def detect_component():
     """
     from app.detect_image_input import parse_confidence, parse_request_image
 
-    pil_image, parse_error = parse_request_image()
-    if parse_error:
-        return jsonify({'success': False, 'error': parse_error}), 400
-    if pil_image is None:
-        return jsonify({'success': False, 'error': 'No valid image data or file received.'}), 400
+    try:
+        pil_image, parse_error = parse_request_image()
+        if parse_error:
+            return jsonify({'success': False, 'error': parse_error}), 400
+        if pil_image is None:
+            return jsonify({'success': False, 'error': 'No valid image data or file received.'}), 400
 
-    confidence = parse_confidence()
-    payload, error = _run_yolo_detection(pil_image, confidence=confidence)
-    if error:
-        return jsonify({'success': False, 'error': error}), 500
+        confidence = parse_confidence()
+        payload, error = _run_yolo_detection(pil_image, confidence=confidence)
+        if error:
+            return jsonify({'success': False, 'error': error}), 500
 
-    return jsonify({
-        'success': True,
-        'count': len(payload['detections']),
-        'detections': payload['detections'],
-        'model': payload['model'],
-        'output_dir': payload.get('output_dir', ''),
-        'image_width': payload.get('image_width'),
-        'image_height': payload.get('image_height'),
-    })
+        return jsonify({
+            'success': True,
+            'count': len(payload['detections']),
+            'detections': payload['detections'],
+            'model': payload['model'],
+            'output_dir': payload.get('output_dir', ''),
+            'image_width': payload.get('image_width'),
+            'image_height': payload.get('image_height'),
+        })
+    except Exception as exc:
+        try:
+            current_app.logger.exception('detect_component failed')
+        except RuntimeError:
+            pass
+        return jsonify({
+            'success': False,
+            'error': _public_detection_error(str(exc)),
+        }), 500
 
 
 @api_bp.route('/detect/model', methods=['GET'])
 def detect_model_info():
     """Return the YOLO weights path the API would use (no inference)."""
     p = _detection_model_path()
+    loaded = False
+    try:
+        get_yolo_model()
+        loaded = True
+    except Exception:
+        loaded = False
     return jsonify({
         'success': True,
         'model': str(p),
         'exists': p.exists(),
+        'loaded': loaded,
+        'api_version': 2,
         'pinned_by_env': bool(os.getenv('GENSPARK_YOLO_MODEL', '').strip()),
     })
 
