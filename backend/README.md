@@ -54,12 +54,12 @@ backend/
 
 ## Deploy to Railway
 
-**No `railway.json` needed** — Railway uses only:
+Use **only** these files when this folder is the Railway root:
 
 `app.py` · `requirements.txt` · `Procfile` · `runtime.txt` · `best.pt`
 
 1. Push repo to GitHub.
-2. Railway service → **Root directory**: `backend`
+2. Railway service → **Root directory**: `backend` (or use repo root `railway.json` for full app in `vendor dashboard`)
 3. Upload `best.pt` (volume or deploy artifact).
 4. **Redeploy** from Deployments tab after each push.
 5. Vercel: `VITE_API_BASE=https://YOUR-SERVICE.up.railway.app`
