@@ -52,6 +52,7 @@ def create_app(config_name='default'):
         origins=_cors_origins(),
         allow_headers=['Content-Type', 'Authorization', 'X-GenSpark-Model-Reload-Key'],
         methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        intercept_exceptions=True,
     )
 
     db.init_app(app)

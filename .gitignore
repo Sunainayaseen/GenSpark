@@ -6,9 +6,12 @@ __pycache__/
 **/.venv/
 venv/
 
-# YOLO training artifacts (deployed weights live in vendor dashboard/models/)
+# YOLO training artifacts (deployed weights live in vendor dashboard/models/ or backend/)
 runs/
 *.cache
+backend/best.pt
+vendor dashboard/models/*.pt
+!vendor dashboard/models/best.pt
 
 # Secrets
 .env

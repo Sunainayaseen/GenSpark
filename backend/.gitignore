@@ -1,0 +1,7 @@
+# Weights are large — upload via Railway volume or deploy artifact; do not commit.
+best.pt
+*.pt
+
+.env
+__pycache__/
+.venv/

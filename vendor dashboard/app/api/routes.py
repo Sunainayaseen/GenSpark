@@ -212,25 +212,32 @@ def _boxes_to_detections(result, img_w, img_h):
     return detections
 
 
-def _run_yolo_detection(image_path, confidence=0.35):
+def _run_yolo_detection(image_source, confidence=0.35):
+    """
+    Run YOLO on a file path or PIL Image (webcam base64 / multipart upload).
+    """
+    from PIL import Image as PILImage
+
     try:
         model, model_path = get_yolo_model()
-        results = model.predict(
-            source=str(image_path),
-            conf=confidence,
-            verbose=False,
-        )
+        source = image_source
+        if isinstance(image_source, PILImage.Image):
+            img_w, img_h = image_source.size
+        else:
+            source = str(image_source)
+            img_w, img_h = _read_image_pixel_size(Path(source))
+
+        results = model.predict(source=source, conf=confidence, verbose=False)
         if not results:
             return {
                 'detections': [],
                 'model': str(model_path),
                 'output_dir': '',
-                'image_width': None,
-                'image_height': None,
+                'image_width': img_w,
+                'image_height': img_h,
             }, None
 
         r0 = results[0]
-        img_w, img_h = _read_image_pixel_size(image_path)
         if (not img_w or not img_h) and getattr(r0, 'orig_shape', None):
             img_h, img_w = int(r0.orig_shape[0]), int(r0.orig_shape[1])
 
@@ -243,122 +250,30 @@ def _run_yolo_detection(image_path, confidence=0.35):
             'image_height': img_h,
         }, None
     except ImportError:
-        pass
+        return None, _public_detection_error(
+            'Ultralytics is not installed. Run: pip install ultralytics'
+        )
     except FileNotFoundError as exc:
         return None, _public_detection_error(str(exc))
     except Exception as exc:
         return None, _public_detection_error(str(exc))
 
-    yolo_cmd = shutil.which('yolo')
-    if not yolo_cmd:
-        return None, _public_detection_error(
-            'Ultralytics is not installed. Run: pip install ultralytics'
-        )
-
-    run_name = f'api-{uuid.uuid4().hex[:10]}'
-    output_root = Path.home() / 'yolov5' / 'genspark_api_runs'
-    output_root.mkdir(parents=True, exist_ok=True)
-
-    cmd = [
-        yolo_cmd,
-        'task=detect',
-        'mode=predict',
-        f'model={model_path}',
-        f'source={image_path}',
-        'save=True',
-        'save_txt=True',
-        'save_conf=True',
-        f'conf={confidence}',
-        f'project={output_root}',
-        f'name={run_name}',
-        'exist_ok=True',
-        'verbose=False',
-    ]
-
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-    if result.returncode != 0:
-        error = (result.stderr or result.stdout or 'YOLO prediction failed').strip()
-        return None, _public_detection_error(error)
-
-    labels_file = output_root / run_name / 'labels' / f'{image_path.stem}.txt'
-    detections = []
-    img_w, img_h = _read_image_pixel_size(image_path)
-    if labels_file.exists():
-        for raw_line in labels_file.read_text(encoding='utf-8').splitlines():
-            parts = raw_line.strip().split()
-            if len(parts) < 6:
-                continue
-            class_id = int(float(parts[0]))
-            xc, yc, bw, bh = map(float, parts[1:5])
-            conf01 = float(parts[5])
-            confidence_pct = round(conf01 * 100, 2)
-            component = _component_name(class_id)
-            xyxy = _norm_xywh_to_xyxy_pixel(xc, yc, bw, bh, img_w, img_h)
-            box = {'xCenter': xc, 'yCenter': yc, 'width': bw, 'height': bh}
-            common = {
-                'classId': class_id,
-                'class_name': component,
-                'confidence_model': round(conf01, 4),
-                'box': box,
-                'xyxy': xyxy,
-            }
-            if confidence_pct < DISPLAY_CONFIRM_CONFIDENCE_PCT:
-                detections.append({
-                    **common,
-                    'type': 'UNKNOWN',
-                    'name': 'Unknown Component',
-                    'spec': f'Below {DISPLAY_CONFIRM_CONFIDENCE_PCT:.0f}% certainty — not labeled as a trained part',
-                    'confidence': confidence_pct,
-                    'rawGuess': component.title(),
-                })
-            else:
-                detections.append({
-                    **common,
-                    'type': component.upper(),
-                    'name': component.title(),
-                    'spec': f'{confidence_pct}% confidence',
-                    'confidence': confidence_pct,
-                })
-
-    return {
-        'detections': detections,
-        'model': str(model_path),
-        'output_dir': str(output_root / run_name),
-        'image_width': img_w,
-        'image_height': img_h,
-    }, None
-
 
 @api_bp.route('/detect/component', methods=['POST'])
 def detect_component():
-    """Receive an uploaded image and return YOLO component detections for React."""
-    image = request.files.get('image')
-    if not image or not image.filename:
-        return jsonify({'success': False, 'error': 'Image file is required.'}), 400
+    """
+    YOLO detect from multipart file, JSON base64, or form data URL (webcam / upload).
+    """
+    from app.detect_image_input import parse_confidence, parse_request_image
 
-    ext = Path(image.filename).suffix.lower()
-    if not ext:
-        ext = MIMETYPE_EXTENSIONS.get((image.mimetype or '').lower(), '')
-    if ext not in SUPPORTED_IMAGE_EXTENSIONS:
-        return jsonify({'success': False, 'error': 'Unsupported image format.'}), 400
-    storage_ext = '.jpg' if ext in {'.jpe', '.jfif'} else ext
+    pil_image, parse_error = parse_request_image()
+    if parse_error:
+        return jsonify({'success': False, 'error': parse_error}), 400
+    if pil_image is None:
+        return jsonify({'success': False, 'error': 'No valid image data or file received.'}), 400
 
-    try:
-        confidence = float(request.form.get('conf', 0.35))
-    except (TypeError, ValueError):
-        confidence = 0.35
-    confidence = min(max(confidence, 0.1), 0.95)
-
-    upload_dir = Path.home() / 'yolov5' / 'genspark_api_uploads'
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = secure_filename(image.filename)
-    if Path(safe_name).suffix.lower() != storage_ext:
-        safe_name = f'{Path(safe_name).stem or "capture"}{storage_ext}'
-    filename = f'{uuid.uuid4().hex}_{safe_name}'
-    image_path = upload_dir / filename
-    image.save(image_path)
-
-    payload, error = _run_yolo_detection(image_path, confidence=confidence)
+    confidence = parse_confidence()
+    payload, error = _run_yolo_detection(pil_image, confidence=confidence)
     if error:
         return jsonify({'success': False, 'error': error}), 500
 
@@ -367,7 +282,7 @@ def detect_component():
         'count': len(payload['detections']),
         'detections': payload['detections'],
         'model': payload['model'],
-        'output_dir': payload['output_dir'],
+        'output_dir': payload.get('output_dir', ''),
         'image_width': payload.get('image_width'),
         'image_height': payload.get('image_height'),
     })
