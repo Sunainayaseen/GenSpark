@@ -1,10 +1,9 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "nixpacks"
   },
   "deploy": {
-    "startCommand": "python app.py",
-    "healthcheckPath": "/health"
+    "startCommand": "python app.py"
   }
 }
