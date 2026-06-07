@@ -2880,7 +2880,6 @@ def _log_startup_db_probe() -> None:
 
 _log_startup_db_probe()
 
-register_auth_routes(app, get_db_connection, _json_error, _json_ok)
 
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
