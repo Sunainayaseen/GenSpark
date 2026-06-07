@@ -9,3 +9,5 @@ if not exist "%SRC%" (
 )
 copy /Y "%SRC%" "%DST%"
 echo Copied to %DST%
+if not exist "%~dp0uploads" mkdir "%~dp0uploads"
+echo uploads\ folder ready.

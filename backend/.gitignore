@@ -1,7 +1,11 @@
-# Weights are large — upload via Railway volume or deploy artifact; do not commit.
-best.pt
-*.pt
-
 .env
 __pycache__/
-.venv/
+myvenv/
+myvenv64/
+uploads/*
+!uploads/.gitkeep
+
+# Large weights
+best.pt
+yolov8n.pt
+*.pt

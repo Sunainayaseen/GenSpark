@@ -1,115 +1,69 @@
-# GenSpark YOLO Backend (Railway)
-
-Minimal Flask API for **React (Vercel) → Flask (Railway) → YOLOv8**.
-
-```
-my-react-app (Vercel)
-      ↓  VITE_API_BASE / proxy
-Flask API (this folder on Railway)
-      ↓
-best.pt
-```
-
-## Folder layout
+# GenSpark Backend (Flask + YOLO) — Render / Railway
 
 ```
 backend/
 ├── app.py
-├── best.pt          ← place trained weights here (not committed)
 ├── requirements.txt
-├── Procfile
+├── render.yaml          # optional Render blueprint
+├── Procfile             # Railway: web: gunicorn app:app
 ├── runtime.txt
-└── README.md
+├── best.pt              # trained weights (local; not in git)
+├── yolov8n.pt           # optional nano fallback
+└── uploads/
 ```
 
-## Local setup
+## STEP 1 — Local setup
 
-1. Copy weights after training:
+```bat
+cd backend
+py -3.10 -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+copy_weights.bat
+```
 
-   ```bat
-   copy "vendor dashboard\models\best.pt" backend\best.pt
-   ```
+`copy_weights.bat` copies `vendor dashboard\models\best.pt` → `backend\best.pt`.
 
-   Or run `tools\train_yolov8.py` (deploys to `vendor dashboard\models\best.pt`) then copy.
+Optional nano weights (first run may auto-download):
 
-2. Create venv and install:
+```bat
+.venv\Scripts\python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+```
 
-   ```bat
-   cd backend
-   py -3.10 -m venv .venv
-   .venv\Scripts\pip install -r requirements.txt
-   ```
+## STEP 2 — Run locally
 
-3. Run:
+```bat
+.venv\Scripts\python app.py
+```
 
-   ```bat
-   .venv\Scripts\python app.py
-   ```
+Open: http://127.0.0.1:5000/ → `Backend Running`
 
-   - Health: http://127.0.0.1:5000/health  
-   - Tutorial predict: `POST /predict` (field `file`)  
-   - React chatbot: `POST /api/detect/component` (field `image`)
+## STEP 3 — Render deploy
 
-4. Point the React app at local Flask (`flaskBase.js` already uses `http://127.0.0.1:5000` on localhost).
+1. New **Web Service** → connect GitHub repo  
+2. **Root directory:** `backend` (if monorepo) or use this folder as its own repo  
+3. **Build:** `pip install -r requirements.txt`  
+4. **Start command:** `gunicorn app:app` (Render: `gunicorn app:app --bind 0.0.0.0:$PORT`)  
+5. Upload `best.pt` or set env `YOLO_MODEL_PATH=best.pt`  
+6. Add `best.pt` to deploy (Git LFS / manual upload) — file is gitignored by default (~6 MB)
 
-## Deploy to Railway
+Or use `render.yaml` in this folder.
 
-Use **only** these files when this folder is the Railway root:
-
-`app.py` · `requirements.txt` · `Procfile` · `runtime.txt` · `best.pt`
-
-1. Push repo to GitHub.
-2. Railway service → **Root directory**: `backend` (or use repo root `railway.json` for full app in `vendor dashboard`)
-3. Upload `best.pt` (volume or deploy artifact).
-4. **Redeploy** from Deployments tab after each push.
-5. Vercel: `VITE_API_BASE=https://YOUR-SERVICE.up.railway.app`
-
-### Live production (full API)
-
-**https://genspark-production.up.railway.app** uses **`vendor dashboard/`** (auth, DB, orders + YOLO).  
-Set Railway root directory to `vendor dashboard` in the dashboard — not `backend`.
-
-| Root directory | Use case |
-|----------------|----------|
-| `vendor dashboard` | **Current live** GenSpark API |
-| `backend` | YOLO-only microservice (tutorial layout) |
-
-## GitHub push (first time)
+## STEP 4 — GitHub push
 
 ```bat
 git add backend
-git commit -m "Add Railway YOLO Flask backend"
-git push -u origin main
+git commit -m "Add Render-ready Flask YOLO backend"
+git push origin main
 ```
 
-## Procfile
+## API (GenSpark React)
 
-Must be named exactly `Procfile` (no `.txt`):
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/` | Backend Running |
+| GET | `/health` | OK |
+| GET | `/api/detect/model` | Model path + exists |
+| POST | `/api/detect/component` | field `image` (file or base64 JSON) |
+| POST | `/predict` | field `file` (tutorial format) |
 
-```
-web: gunicorn app:app
-```
-
-## API reference
-
-### `POST /predict`
-
-Tutorial format. Body: `multipart/form-data`, field **`file`**.
-
-```json
-{
-  "detections": [
-    { "class": "keyboard", "confidence": 0.87 }
-  ]
-}
-```
-
-### `POST /api/detect/component`
-
-GenSpark React format. Body: field **`image`**, optional **`conf`** (0.1–0.95).
-
-Returns bounding boxes, class names, and overlay data for `ImageDetectOverlay`.
-
-### `GET /health`
-
-Plain `OK` for Railway health checks.
+Vercel env: `VITE_API_BASE=https://YOUR-RENDER-URL.onrender.com`

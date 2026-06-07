@@ -1,10 +1,16 @@
 flask
 flask-cors
+bcrypt
+PyJWT
+stripe
+python-dotenv
+openai>=1.40.0
+mysql-connector-python
+#ultralytics
+#opencv-python-headless
+#numpy
 gunicorn
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-torchvision
-ultralytics
-opencv-python-headless
 pillow
-numpy
+#--extra-index-url https://download.pytorch.org/whl/cpu
+#torch
+#torchvision
