@@ -2885,11 +2885,11 @@ register_auth_routes(app, get_db_connection, _json_error, _json_ok)
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
     _force_utf8_stdio()
-    default_port = '7860' if os.getenv('SPACE_ID') else '5001'
-    port = int(os.getenv('PORT', default_port))
-    app.run(
-        host='0.0.0.0',
-        port=port,
-        debug=os.getenv('FLASK_DEBUG', '0') == '1',
-        threaded=True,
-    )
+    _log_startup_db_probe()
+    register_auth_routes(app, get_db_connection, _json_error, _json_ok)
+    
+    # Railway passes a dynamic port via environment variables
+    port = int(os.environ.get('PORT', 5000))
+    
+    # host="0.0.0.0" is mandatory for Railway to detect the running container
+    app.run(host="0.0.0.0", port=port, debug=False)
