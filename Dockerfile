@@ -1,20 +1,24 @@
-# Base image
-FROM python:3.10-slim
+# GenSpark backend (Flask API) container.
+# The React frontend (frontend/) is a static SPA — build it with `npm run build`
+# and host it separately (e.g. Vercel/Netlify) or behind a static server.
+FROM python:3.11-slim
 
-# Install Node.js for MERN backend
-RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
 WORKDIR /app
 
-# Copy project files
-COPY . .
+# System deps for OpenCV / Pillow used by the detection utilities.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies for YOLOv8
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies first (better layer caching).
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
 
-# Install Node.js dependencies (if package.json exists)
-RUN if [ -f package.json ] ; then npm install --no-audit --no-fund ; fi
+# Copy the backend application.
+COPY backend ./backend
 
-# Command to run both Node.js and Python backend
-CMD ["sh", "-c", "node server.js & python backend/app.py"]
+ENV PORT=5000
+EXPOSE 5000
+
+# WSGI entry: backend/run.py exposes `app` (gunicorn run:app).
+CMD ["sh", "-c", "gunicorn --chdir backend --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --timeout 120 run:app"]
