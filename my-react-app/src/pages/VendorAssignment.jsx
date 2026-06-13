@@ -4,11 +4,13 @@ import { useApp } from '../context/AppContext';
 import { useCart } from '../context/CartContext';
 import './VendorAssignment.css';
 import { dashboardGet, dashboardPost } from '../api/dashboardApi';
+import { useConfirm } from '../components/ConfirmProvider';
 
 const VendorAssignment = () => {
   const navigate = useNavigate();
   const { selectedBuild, userRequirements } = useApp();
   const { addToCart, cartItems } = useCart();
+  const { confirm } = useConfirm();
   const [selectedVendor, setSelectedVendor] = useState(null);
   /** 'delivery' = cash on delivery (COD); 'online' = card form shown */
   const [paymentMethod, setPaymentMethod] = useState('delivery');
@@ -61,8 +63,12 @@ const VendorAssignment = () => {
 
   const handleBlockVendor = async (vendor) => {
     if (!vendor?.id) return;
-    const confirmMsg = `Remove this vendor from the assignment list?\n\n${vendor.shop_name || vendor.name}`;
-    const ok = window.confirm(confirmMsg);
+    const ok = await confirm({
+      title: 'Remove vendor?',
+      message: `Remove "${vendor.shop_name || vendor.name}" from the assignment list?`,
+      confirmText: 'Remove',
+      danger: true,
+    });
     if (!ok) return;
 
     try {

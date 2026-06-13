@@ -1,5 +1,7 @@
 .landing {
   width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 /* Scroll-triggered animations - Enhanced */

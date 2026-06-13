@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useConfirm } from '../components/ConfirmProvider';
 import './Contact.css';
 
 const Contact = () => {
+  const { notify } = useConfirm();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -12,9 +14,7 @@ const Contact = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Handle form submission
-    console.log('Form submitted:', formData);
-    alert('Thank you for contacting us! We will get back to you soon.');
+    notify('Thank you for contacting us! We will get back to you soon.', { type: 'success' });
     setFormData({
       name: '',
       email: '',

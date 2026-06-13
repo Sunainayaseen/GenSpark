@@ -27,18 +27,43 @@ export function formatDetectionError(raw) {
     return 'Please upload a **JPG**, **PNG**, or **WebP** photo with the component clearly visible and well lit.';
   }
 
+  if (lower.includes('getapiurl is not defined') || lower.includes('is not defined')) {
+    return 'Detection could not start (app configuration). Refresh the page after running START-GENSPARK-DEV.bat.';
+  }
+
+  if (
+    lower.includes('not found') &&
+    (lower.includes('recommend-build') || lower.includes('recommend build'))
+  ) {
+    return (
+      '**AI recommendations are not available on this server.** Restart the app from the project folder: ' +
+      'run **`vendor dashboard/run.py`** (port 5000) or **`START-GENSPARK-DEV.bat`**, then refresh **http://localhost:5173/chatbot**.'
+    );
+  }
+
+  if (
+    lower.includes('timed out') ||
+    lower.includes('timeout') ||
+    lower.includes('econnaborted')
+  ) {
+    return msg;
+  }
+
   if (
     lower.includes('failed to fetch') ||
     lower.includes('network') ||
-    lower.includes('load failed')
+    lower.includes('load failed') ||
+    lower.includes('could not reach') ||
+    lower.includes('connection refused') ||
+    lower.includes('err_connection')
   ) {
-    const onLocal =
-      typeof window !== 'undefined' &&
-      /^localhost$|^127\.0\.0\.1$/i.test(window.location.hostname || '');
-    if (onLocal) {
+    const isDev =
+      typeof import.meta !== 'undefined' && import.meta.env?.DEV;
+    if (isDev) {
       return (
-        'Could not reach the local GenSpark API. Start the Flask backend from the **vendor dashboard** folder ' +
-        '(e.g. `python run.py` on port 5000), then try the image again.'
+        '**Local API not reachable.** Double-click **`START-GENSPARK-DEV.bat`** in the project root ' +
+        '(starts `backend/app.py` on port 5000), then refresh this page and upload again. ' +
+        'Use **http://localhost:5173/chatbot** if you opened the site via a LAN IP.'
       );
     }
     return 'Could not reach the GenSpark server. Check your internet connection and try again.';

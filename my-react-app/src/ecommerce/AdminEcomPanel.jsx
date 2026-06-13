@@ -8,12 +8,14 @@ import {
   ecomAdminOrders,
   ecomAdminSetOrderStatus,
 } from '../api/ecomApi';
+import { useConfirm } from '../components/ConfirmProvider';
 import './ecommerce.css';
 
 const ORDER_STATUS_OPTIONS = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 
 const AdminEcomPanel = () => {
   const { isLoggedIn, isAdmin, user } = useAuth();
+  const { confirm } = useConfirm();
   const [carts, setCarts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [msg, setMsg] = useState(null);
@@ -56,7 +58,12 @@ const AdminEcomPanel = () => {
   }, [isLoggedIn, isAdmin, tab, loadCarts, loadOrders]);
 
   const approve = async (id) => {
-    if (!window.confirm('Approve this cart?')) return;
+    const ok = await confirm({
+      title: 'Approve cart?',
+      message: 'Approve this cart so the customer can proceed to checkout?',
+      confirmText: 'Approve',
+    });
+    if (!ok) return;
     try {
       await ecomAdminApproveCart(id);
       setMsg('Approved');
@@ -67,7 +74,13 @@ const AdminEcomPanel = () => {
   };
 
   const reject = async (id) => {
-    if (!window.confirm('Reject this cart?')) return;
+    const ok = await confirm({
+      title: 'Reject cart?',
+      message: 'Reject this cart and send it back to the customer?',
+      confirmText: 'Reject',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await ecomAdminRejectCart(id);
       setMsg('Rejected');

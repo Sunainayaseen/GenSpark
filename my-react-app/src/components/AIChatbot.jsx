@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { User } from 'lucide-react';
 import './AIChatbot.css';
 
 const GENSPARK_WIDGET_LOGO = '/genspark-gs-circuit-logo.png';
@@ -310,10 +311,7 @@ const AIChatbot = () => {
       {isMinimized && (
         <button
           className="chatbot-minimized"
-          onClick={() => {
-            setIsMinimized(false);
-            setIsOpen(true);
-          }}
+          onClick={() => navigate('/chatbot')}
           aria-label="Open AI Assistant"
         >
           <div className="minimized-icon">
@@ -389,7 +387,9 @@ const AIChatbot = () => {
                         <span className="bot-avatar-text">AI</span>
                       </div>
                     ) : (
-                      <div className="user-avatar">U</div>
+                      <div className="user-avatar user-avatar-icon-wrap" aria-hidden="true">
+                        <User size={16} strokeWidth={2.5} />
+                      </div>
                     )}
                   </div>
                   <div className="widget-message-content">

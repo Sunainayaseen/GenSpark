@@ -1,18 +1,46 @@
 import { useCart } from '../context/CartContext';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBlockingOrder } from '../hooks/useBlockingOrder';
+import { useConfirm } from '../components/ConfirmProvider';
 import './CartPage.css';
 
 const CartPage = () => {
   const { cartItems, vendorGroups, cartTotal, updateQuantity, removeFromCart, clearCart, cartLoading, toast } = useCart();
+  const { confirm } = useConfirm();
   const { blockingOrder } = useBlockingOrder();
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const checkoutBlocked = Boolean(blockingOrder);
 
+  const buildGroups = useMemo(() => {
+    const groups = {};
+    cartItems.forEach((item) => {
+      if (!item.pc_build_id) return;
+      const id = item.pc_build_id;
+      if (!groups[id]) {
+        groups[id] = {
+          pc_build_id: id,
+          componentCount: 0,
+          quantity: 0,
+          subtotal: 0,
+        };
+      }
+      groups[id].componentCount += 1;
+      groups[id].quantity += Number(item.quantity || 0);
+      groups[id].subtotal += Number(item.subtotal || 0);
+    });
+    return Object.values(groups);
+  }, [cartItems]);
+
   const handleEmpty = async () => {
-    const ok = window.confirm('Are you sure you want to empty the cart?');
+    const ok = await confirm({
+      title: 'Empty your cart?',
+      message: 'This removes all items from your cart. This action cannot be undone.',
+      confirmText: 'Empty cart',
+      cancelText: 'Keep items',
+      danger: true,
+    });
     if (!ok) return;
     setBusy(true);
     try {
@@ -33,6 +61,28 @@ const CartPage = () => {
             </button>
           </div>
         </div>
+
+        {buildGroups.length > 0 && (
+          <div className="cart-build-summary">
+            <h2>Custom build bundles</h2>
+            <div className="cart-build-summary-grid">
+              {buildGroups.map((bundle) => (
+                <div key={bundle.pc_build_id} className="cart-build-summary-card">
+                  <div>
+                    <div className="cart-build-label">Build ID {bundle.pc_build_id}</div>
+                    <div className="cart-build-meta">
+                      {bundle.componentCount} components · {bundle.quantity} units
+                    </div>
+                  </div>
+                  <div className="cart-build-subtotal">PKR {bundle.subtotal.toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+            <p className="cart-build-summary-note">
+              Custom builds are bundled and fulfilled by approved vendors. Review the cart items below before checkout.
+            </p>
+          </div>
+        )}
 
         {cartLoading ? (
           <div className="cart-loading">Loading cart...</div>

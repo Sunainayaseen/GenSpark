@@ -9,12 +9,6 @@ const IconUsers = () => (
 const IconMonitor = () => (
   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="about-svg-icon"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
 );
-const IconStar = () => (
-  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="about-svg-icon"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-);
-const IconCalendar = () => (
-  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="about-svg-icon"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-);
 const IconTarget = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="about-svg-icon"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>
 );
@@ -43,13 +37,17 @@ const IconCpu = () => (
   <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="about-svg-icon"><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" /><line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" /><line x1="20" y1="9" x2="23" y2="9" /><line x1="20" y1="14" x2="23" y2="14" /><line x1="1" y1="9" x2="4" y2="9" /><line x1="1" y1="14" x2="4" y2="14" /></svg>
 );
 
+const IconMapPin = () => (
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="about-svg-icon"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+);
+
 const About = () => {
   const statsRef = useRef(null);
   const [statsAnimated, setStatsAnimated] = useState(false);
-  const [clients, setClients] = useState(0);
-  const [projects, setProjects] = useState(0);
-  const [satisfaction, setSatisfaction] = useState(0);
-  const [experience, setExperience] = useState(0);
+  const [vendors, setVendors] = useState(0);
+  const [components, setComponents] = useState(0);
+  const [compatibility, setCompatibility] = useState(0);
+  const [cities, setCities] = useState(0);
 
   const animateCounter = (start, end, duration, setter) => {
     const startTime = performance.now();
@@ -75,10 +73,10 @@ const About = () => {
       entries.forEach((entry) => {
         if (entry.isIntersecting && !statsAnimated) {
           setStatsAnimated(true);
-          animateCounter(0, 1000, 2000, setClients);
-          animateCounter(0, 500, 2000, setProjects);
-          animateCounter(0, 98, 2000, setSatisfaction);
-          animateCounter(0, 5, 2000, setExperience);
+          animateCounter(0, 12, 2000, setVendors);
+          animateCounter(0, 85, 2000, setComponents);
+          animateCounter(0, 100, 2000, setCompatibility);
+          animateCounter(0, 4, 2000, setCities);
           statsObserver.unobserve(entry.target);
         }
       });
@@ -166,23 +164,23 @@ const About = () => {
           <div className="stats-grid">
             <div className="stat-card" data-scroll="scale" data-delay="100">
               <div className="stat-icon"><IconUsers /></div>
-              <div className="stat-number">{clients}+</div>
-              <div className="stat-label">Happy Clients</div>
+              <div className="stat-number">{vendors}+</div>
+              <div className="stat-label">Verified Vendors</div>
             </div>
             <div className="stat-card" data-scroll="scale" data-delay="200">
               <div className="stat-icon"><IconMonitor /></div>
-              <div className="stat-number">{projects}+</div>
-              <div className="stat-label">PCs Built</div>
+              <div className="stat-number">{components}+</div>
+              <div className="stat-label">Catalog Components</div>
             </div>
             <div className="stat-card" data-scroll="scale" data-delay="300">
-              <div className="stat-icon"><IconStar /></div>
-              <div className="stat-number">{satisfaction}%</div>
-              <div className="stat-label">Satisfaction Rate</div>
+              <div className="stat-icon"><IconCheckCircle /></div>
+              <div className="stat-number">{compatibility}%</div>
+              <div className="stat-label">Compatibility Checked</div>
             </div>
             <div className="stat-card" data-scroll="scale" data-delay="400">
-              <div className="stat-icon"><IconCalendar /></div>
-              <div className="stat-number">{experience}+</div>
-              <div className="stat-label">Years Experience</div>
+              <div className="stat-icon"><IconMapPin /></div>
+              <div className="stat-number">{cities}</div>
+              <div className="stat-label">Cities Covered</div>
             </div>
           </div>
         </div>

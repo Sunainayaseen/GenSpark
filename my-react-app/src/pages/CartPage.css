@@ -15,6 +15,55 @@
   gap: var(--spacing-md);
 }
 
+.cart-build-summary {
+  margin: var(--spacing-lg) 0;
+  padding: var(--spacing-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.cart-build-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+  margin: var(--spacing-md) 0;
+}
+
+.cart-build-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid rgba(var(--primary-rgb), 0.12);
+  border-radius: var(--radius-md);
+}
+
+.cart-build-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cart-build-meta {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-top: 0.3rem;
+}
+
+.cart-build-subtotal {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.cart-build-summary-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
 .cart-loading,
 .cart-empty-state {
   padding: var(--spacing-xl);
@@ -116,19 +165,36 @@
 }
 
 .remove-item-btn {
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: transparent;
-  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid #fca5a5;
+  background: #fff5f5;
+  padding: 7px 16px;
   border-radius: 999px;
   cursor: pointer;
-  color: #ffb4b4;
-  font-weight: 700;
-  transition: all 0.2s ease;
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+  transition: all 0.18s ease;
 }
 
 .remove-item-btn:hover {
-  background: rgba(255, 180, 180, 0.12);
-  border-color: rgba(255, 180, 180, 0.55);
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.32);
+  transform: translateY(-1px);
+}
+
+.remove-item-btn:active {
+  transform: translateY(0);
+}
+
+.remove-item-btn:focus-visible {
+  outline: 2px solid #dc2626;
+  outline-offset: 2px;
 }
 
 .cart-total-summary {

@@ -129,7 +129,9 @@
 /* Stats Section */
 .about-stats {
   padding: calc(var(--spacing-2xl) + 2rem) 0;
-  background: var(--bg-primary);
+  background:
+    radial-gradient(ellipse at top center, rgba(59, 130, 246, 0.06) 0%, transparent 55%),
+    linear-gradient(180deg, #0a0a0a 0%, #111317 50%, #0f0f0f 100%);
 }
 
 .stats-grid {
@@ -193,20 +195,26 @@
 }
 
 .stat-number {
-  font-size: 2.5rem;
+  font-size: clamp(2rem, 5vw, 2.6rem);
   font-weight: 800;
-  color: #7dd3fc;
-  line-height: 1;
-  margin-bottom: var(--spacing-xs);
-  text-shadow: 0 0 24px rgba(125, 211, 252, 0.45);
+  background: linear-gradient(135deg, #e0f2fe 0%, #38bdf8 55%, #0ea5e9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.05;
+  margin-bottom: 0.45rem;
+  filter: drop-shadow(0 0 18px rgba(56, 189, 248, 0.35));
 }
 
 .stat-label {
-  font-size: 0.9rem;
-  color: rgba(241, 245, 249, 0.88);
+  font-size: clamp(0.72rem, 2vw, 0.84rem);
+  color: rgba(241, 245, 249, 0.85);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.4px;
   font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  hyphens: none;
 }
 
 /* Story Section */
@@ -373,7 +381,9 @@
 /* Mission Section */
 .about-mission {
   padding: calc(var(--spacing-2xl) + 2rem) 0;
-  background: var(--bg-primary);
+  background:
+    radial-gradient(ellipse at bottom center, rgba(6, 182, 212, 0.05) 0%, transparent 55%),
+    linear-gradient(180deg, #0f0f0f 0%, #0a0a0a 50%, #0f0f0f 100%);
 }
 
 .mission-grid {
@@ -535,13 +545,14 @@
   filter: drop-shadow(0 2px 14px rgba(0, 0, 0, 0.5));
 }
 
-/* Light section: keep strong navy/cyan contrast on cream background */
+/* Dark section: bright cyan gradient for contrast on the dark background */
 .about-team .section-title {
-  background: linear-gradient(135deg, #0c4a6e 0%, var(--primary) 45%, #0369a1 100%);
+  background: linear-gradient(135deg, #f0f9ff 0%, #7dd3fc 42%, #38bdf8 52%, #bae6fd 100%);
   background-size: 200% 200%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  filter: drop-shadow(0 2px 14px rgba(0, 0, 0, 0.5));
 }
 
 .section-subtitle {
@@ -555,7 +566,7 @@
 }
 
 .about-team .section-subtitle {
-  color: var(--text-secondary);
+  color: rgba(241, 245, 249, 0.85);
 }
 
 .values-grid {
@@ -640,7 +651,9 @@
 /* Team Section */
 .about-team {
   padding: calc(var(--spacing-2xl) + 2rem) 0;
-  background: var(--bg-primary);
+  background:
+    radial-gradient(ellipse at top center, rgba(59, 130, 246, 0.06) 0%, transparent 55%),
+    linear-gradient(180deg, #0f0f0f 0%, #111317 50%, #0a0a0a 100%);
 }
 
 .team-grid {

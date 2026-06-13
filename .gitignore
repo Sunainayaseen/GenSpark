@@ -1,24 +1,26 @@
-# Python
-__pycache__/
-**/__pycache__/
-*.py[cod]
+# Virtual environments (never commit — they exceed GitHub file-size limits)
 .venv/
-**/.venv/
 venv/
+myvenv/
+myvenv64/
+**/.venv/
+**/site-packages/
 
-# YOLO training artifacts (deployed weights live in vendor dashboard/models/ or backend/)
+# Python caches / artifacts
+__pycache__/
+*.pyc
+*.pyo
 runs/
-*.cache
-backend/best.pt
-vendor dashboard/models/*.pt
-!vendor dashboard/models/best.pt
 
-# Secrets
+# Secrets / local config (do NOT commit credentials)
 .env
-.env.*
+*.env
 !.env.example
 
-# OS / IDE
+# Node / build output
+node_modules/
+dist/
+
+# OS / editor
 .DS_Store
 Thumbs.db
-.cursor/

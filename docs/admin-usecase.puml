@@ -1,0 +1,72 @@
+@startuml admin-usecase
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+actor Admin
+
+rectangle "GenSpark Builds — Admin" {
+
+  ' ---- User & Vendor management ----
+  usecase "Manage Users"            as UC_USER
+  usecase "Manage Vendors"          as UC_VENDOR
+  note bottom of UC_VENDOR : add / approve / block
+
+  ' ---- Catalog / Inventory ----
+  usecase "Manage Categories\n& Brands"     as UC_TAXO
+  usecase "Manage Component\nInventory"     as UC_COMP
+  usecase "Manage PreBuilt\nPC Gallery"     as UC_BUILD
+
+  ' ---- Orders ----
+  usecase "Review Orders"                    as UC_ORDERS
+  usecase "Approve Order &\nGenerate Vendor Orders" as UC_APPROVE
+  usecase "Reject Order"                     as UC_REJECT
+  usecase "Approve Vendor\nBuild Proof"      as UC_PROOF
+  usecase "Monitor & Progress\nAssembly"     as UC_ASSEMBLY
+  usecase "Mark Ready\nfor Dispatch"         as UC_DISPATCH
+
+  ' ---- Quality ----
+  usecase "Quality Check\n(Pass / Fail)"     as UC_QA
+
+  ' ---- Delivery / Riders ----
+  usecase "Manage Riders\n(approve registration)" as UC_RIDERS
+  usecase "Approve Rider\nPickup"            as UC_PICKUP
+  usecase "Track Live\nDelivery Map"         as UC_MAP
+  note bottom of UC_DISPATCH : Rider is **auto-assigned**\nby the system (no manual step)
+
+  ' ---- Finance / Insight ----
+  usecase "View Payments"                    as UC_PAY
+  usecase "View Reports\n& Analytics"        as UC_REPORTS
+}
+
+Admin --> UC_USER
+Admin --> UC_VENDOR
+Admin --> UC_TAXO
+Admin --> UC_COMP
+Admin --> UC_BUILD
+
+Admin --> UC_ORDERS
+Admin --> UC_APPROVE
+Admin --> UC_REJECT
+Admin --> UC_PROOF
+Admin --> UC_ASSEMBLY
+Admin --> UC_DISPATCH
+
+Admin --> UC_QA
+
+Admin --> UC_RIDERS
+Admin --> UC_PICKUP
+Admin --> UC_MAP
+
+Admin --> UC_PAY
+Admin --> UC_REPORTS
+
+' ---- Relationships (verified against admin/routes.py) ----
+' Monitoring assembly involves approving each vendor's build proof.
+UC_ASSEMBLY ..> UC_PROOF   : <<include>>
+' QA happens during the assembly-monitoring phase.
+UC_ASSEMBLY ..> UC_QA      : <<extend>>
+' Reports surface payment data.
+UC_REPORTS ..> UC_PAY      : <<extend>>
+
+@enduml

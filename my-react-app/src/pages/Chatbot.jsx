@@ -1,34 +1,65 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { useCart } from '../context/CartContext';
+import { addBuildPartsBulk, addBuildPartsToCart } from '../utils/buildPartMatcher';
+import { resolveBuildParts, addResolvedBuildToCart } from '../utils/buildResolver';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { User } from 'lucide-react';
 
 import chatbotHeaderLogo from '../assets/genspark-gs-circuit-logo.png';
 import ImageDetectOverlay from '../components/ImageDetectOverlay';
-import { getApiUrl } from '../utils/flaskBase';
+import BuildRecommendationCard from '../components/BuildRecommendationCard';
+import BuildCustomizer from '../components/BuildCustomizer';
+import {
+  postRecommendBuild,
+  postCreateBuild,
+  postDetectComponent,
+  extractGeminiBuildSlots,
+} from '../api/builderApi';
 import { formatDetectionError } from '../utils/detectionErrors';
+import {
+  parseChatIntent,
+  parseBudgetFromChat,
+  parsePurposeFromChat,
+  hasBuildIntentFromChat,
+  isPureGreetingMessage,
+  formatBudgetPkr,
+  getAiSourceBadge,
+  formatGeminiFallbackNotice,
+  buildGuideGreetingResponse,
+  buildMarkdownFromFallbackBuild,
+  GUIDE_GREETING_MARKDOWN,
+  AI_SOURCE,
+} from '../utils/chatIntentParse';
 
 import './Chatbot.css';
 
-/** Full API response (detections + model path). */
-const postDetectComponent = async (file, options = {}) => {
-  const formData = new FormData();
-  formData.append('image', file);
-  if (options.confidence != null) {
-    formData.append('conf', String(options.confidence));
+/** Use-case options for the criteria-panel dropdown. */
+const PURPOSE_OPTIONS = [
+  { value: 'Gaming', label: 'Gaming', icon: '🎮' },
+  { value: 'Office', label: 'Office', icon: '💼' },
+  { value: 'Content Creation', label: 'Content Creation', icon: '🎬' },
+];
+
+/** Minimum “thinking” pause before bot replies (feels natural, not instant). */
+const CHAT_REPLY_MIN_MS = 2000;
+const CHAT_REPLY_MAX_MS = 3000;
+
+function chatReplyDelayMs() {
+  return (
+    CHAT_REPLY_MIN_MS +
+    Math.floor(Math.random() * (CHAT_REPLY_MAX_MS - CHAT_REPLY_MIN_MS + 1))
+  );
+}
+
+async function waitForChatReply(startedAt) {
+  const wait = chatReplyDelayMs() - (Date.now() - startedAt);
+  if (wait > 0) {
+    await new Promise((resolve) => setTimeout(resolve, wait));
   }
-
-  const response = await fetch(getApiUrl('/detect/component'), {
-    method: 'POST',
-    body: formData,
-  });
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok || !data.success) {
-    throw new Error(formatDetectionError(data.error || 'Component detection failed.'));
-  }
-
-  return data;
-};
+}
 
 /** YOLO-normalized box (0–1 vs intrinsic frame) → pixel rect on element with object-fit: cover. */
 const normBoxToCoverRect = (box, vidW, vidH, elW, elH) => {
@@ -53,8 +84,10 @@ const normBoxToCoverRect = (box, vidW, vidH, elW, elH) => {
   };
 };
 
-/** Match backend GENSPARK_DISPLAY_CONF_THRESHOLD — hide wrong nearest-class labels when unsure. */
-const DISPLAY_CONFIRM_THRESHOLD_PCT = 80;
+/** Match backend (65). Live camera often scores 70–85% on clear parts — 80 hid real detections. */
+const DISPLAY_CONFIRM_THRESHOLD_PCT = 65;
+const LIVE_DETECT_CONF = 0.25;
+const UPLOAD_DETECT_CONF = 0.4;
 
 /** Defensive normalization if API omits unknown mapping (older server). */
 const normalizeDetectionForUi = (c) => {
@@ -73,21 +106,23 @@ const normalizeDetectionForUi = (c) => {
   return { ...c, displayName: c.name, displayType: c.type, isUnknown: false };
 };
 
-const getCompatibilityAlerts = (detected = [], budget = 0) => {
-  const alerts = [];
-  const normalized = detected.map(normalizeDetectionForUi);
-  if (normalized.some((d) => d.isUnknown)) {
-    alerts.push({
-      type: 'warning',
-      text:
-        'One or more detections had low certainty and were labeled Unknown. YOLO only knows your trained classes — add headsets (or exclude them) plus more balanced data.',
-    });
+/** Sharper JPEG + sane max size for YOLO on live webcam frames. */
+const captureFrameFromVideo = (video, maxDim = 1280, jpegQuality = 0.92) => {
+  let width = video.videoWidth;
+  let height = video.videoHeight;
+  if (!width || !height) return null;
+  if (width > maxDim || height > maxDim) {
+    const scale = maxDim / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
   }
-  if (detected.some((d) => d.type === 'GPU') && budget > 0 && budget < 80000) {
-    alerts.push({ type: 'warning', text: 'Budget may be tight for a dedicated GPU; consider integrated graphics or used GPU.' });
-  }
-  alerts.push({ type: 'info', text: 'All suggested builds are internally compatible (socket, PSU, form factor).' });
-  return alerts;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.drawImage(video, 0, 0, width, height);
+  return { canvas, width, height };
 };
 
 const generateBuilds = (purpose = 'Gaming', budget = 100000, city = '') => {
@@ -97,21 +132,24 @@ const generateBuilds = (purpose = 'Gaming', budget = 100000, city = '') => {
   const bal = budgetNum;
   const bud = Math.max(budgetNum * 0.65, 40000);
 
+  // Part names below are aligned to the seeded ERP catalog (seed_prebuilt_parts.py)
+  // so buildResolver matches each slot 7/7 (office GPU = Integrated, which resolves
+  // to "skipped"). Each value uniquely substring-matches one catalog component.
   const templates = {
     gaming: [
-      { type: 'Performance', price: perf, score: 92, wattage: 650, parts: ['AMD Ryzen 7 5800X', 'NVIDIA RTX 4070', 'ASUS B550-F', '32GB DDR4 3200MHz', '1TB NVMe SSD', '750W 80+ Gold', 'Fractal Design Meshify C'] },
-      { type: 'Balanced', price: bal, score: 78, wattage: 550, parts: ['AMD Ryzen 5 5600X', 'NVIDIA RTX 4060', 'MSI B450 Tomahawk', '16GB DDR4 3200MHz', '512GB NVMe SSD', '650W 80+ Bronze', 'Corsair 4000D'] },
-      { type: 'Budget', price: bud, score: 65, wattage: 450, parts: ['AMD Ryzen 5 3600', 'NVIDIA GTX 1660 Super', 'ASRock B450M', '16GB DDR4 3000MHz', '256GB SSD + 1TB HDD', '550W 80+ Bronze', 'Cooler Master Q300L'] },
+      { type: 'Performance', price: perf, score: 92, wattage: 650, parts: ['AMD Ryzen 7 7700X', 'NVIDIA GeForce RTX 4070', 'MSI PRO B650-P WiFi', 'Corsair Vengeance 32GB DDR5 6000MHz', 'Samsung 980 1TB NVMe SSD', 'Corsair RM750e 750W 80+ Gold', 'NZXT H5 Flow'] },
+      { type: 'Balanced', price: bal, score: 78, wattage: 550, parts: ['AMD Ryzen 5 7600', 'NVIDIA GeForce RTX 4060 Ti 16GB', 'MSI PRO B650M-A WiFi', 'Corsair Vengeance 16GB DDR5 5600MHz', 'Kingston NV2 512GB NVMe SSD', 'Cooler Master MWE 650W 80+ Gold', 'Montech AIR 903'] },
+      { type: 'Budget', price: bud, score: 65, wattage: 450, parts: ['AMD Ryzen 5 5600G', 'NVIDIA GeForce RTX 4060 8GB', 'Gigabyte A520M DS3H', 'Corsair Vengeance LPX 16GB DDR4 3200MHz', 'Kingston NV2 512GB NVMe SSD', 'Cooler Master MWE 550W 80+ Bronze', 'Cooler Master MasterBox Q300L'] },
     ],
     office: [
-      { type: 'Performance', price: perf, score: 88, wattage: 350, parts: ['Intel i7-13700', 'Integrated', 'ASUS B760M', '32GB DDR5', '1TB NVMe SSD', '500W 80+', 'Compact Case'] },
-      { type: 'Balanced', price: bal, score: 75, wattage: 300, parts: ['Intel i5-13400', 'Integrated', 'MSI B660M', '16GB DDR4', '512GB NVMe', '450W 80+', 'SFF Case'] },
-      { type: 'Budget', price: bud, score: 62, wattage: 250, parts: ['AMD Ryzen 5 5600G', 'Integrated', 'A520M', '16GB DDR4', '256GB SSD', '400W 80+', 'Basic Case'] },
+      { type: 'Performance', price: perf, score: 88, wattage: 350, parts: ['AMD Ryzen 5 5600G', 'Integrated', 'Gigabyte A520M DS3H', 'Corsair Vengeance LPX 16GB DDR4 3200MHz', 'Samsung 980 1TB NVMe SSD', 'Cooler Master MWE 450W 80+ Bronze', 'Cooler Master MasterBox Q300L'] },
+      { type: 'Balanced', price: bal, score: 75, wattage: 300, parts: ['AMD Ryzen 5 5600G', 'Integrated', 'Gigabyte A520M DS3H', 'Corsair Vengeance LPX 16GB DDR4 3200MHz', 'Kingston NV2 512GB NVMe SSD', 'Cooler Master MWE 450W 80+ Bronze', 'Montech X3 Mesh'] },
+      { type: 'Budget', price: bud, score: 62, wattage: 250, parts: ['AMD Ryzen 5 5600G', 'Integrated', 'Gigabyte A520M DS3H', 'Corsair Vengeance LPX 16GB DDR4 3200MHz', 'Kingston NV2 512GB NVMe SSD', 'Cooler Master MWE 450W 80+ Bronze', 'Cooler Master MasterBox Q300L'] },
     ],
     creator: [
-      { type: 'Performance', price: perf, score: 94, wattage: 750, parts: ['Intel i9-13900K', 'NVIDIA RTX 4080', 'ASUS Z790', '64GB DDR5', '2TB NVMe SSD', '850W 80+ Gold', 'Lian Li O11'] },
-      { type: 'Balanced', price: bal, score: 80, wattage: 600, parts: ['AMD Ryzen 7 7700X', 'NVIDIA RTX 4070', 'B650', '32GB DDR5', '1TB NVMe', '750W 80+ Gold', 'Fractal Design'] },
-      { type: 'Budget', price: bud, score: 68, wattage: 500, parts: ['AMD Ryzen 5 5600X', 'NVIDIA RTX 3060', 'B550', '32GB DDR4', '512GB NVMe', '600W 80+ Bronze', 'Mesh Case'] },
+      { type: 'Performance', price: perf, score: 94, wattage: 750, parts: ['AMD Ryzen 9 7950X3D', 'NVIDIA GeForce RTX 4090', 'ASUS ROG Strix X670E-E Gaming', 'G.Skill Trident Z5 64GB DDR5', 'WD Black SN770 2TB NVMe SSD', 'Corsair RM1000e 1000W 80+ Gold', 'Lian Li PC-O11'] },
+      { type: 'Balanced', price: bal, score: 80, wattage: 600, parts: ['AMD Ryzen 7 7700X', 'NVIDIA GeForce RTX 4070', 'MSI PRO B650-P WiFi', 'Corsair Vengeance 32GB DDR5 6000MHz', 'Samsung 980 1TB NVMe SSD', 'Corsair RM850e 850W 80+ Gold', 'be quiet! Pure Base 500DX'] },
+      { type: 'Budget', price: bud, score: 68, wattage: 500, parts: ['AMD Ryzen 5 7600', 'NVIDIA GeForce RTX 4060 Ti 16GB', 'MSI PRO B650M-A WiFi', 'Corsair Vengeance 16GB DDR5 5600MHz', 'Kingston NV2 512GB NVMe SSD', 'Cooler Master MWE 650W 80+ Gold', 'Montech X3 Mesh'] },
     ],
   };
   const set = templates[base] || templates.gaming;
@@ -126,32 +164,119 @@ const generateBuilds = (purpose = 'Gaming', budget = 100000, city = '') => {
   }));
 };
 
-const WELCOME_MESSAGE = {
-  type: 'bot',
-  id: 'welcome',
-  intro:
-    "I’m your Build Assistant. Share your use case (Gaming, Office, or Content) and budget in PKR — I’ll recommend up to 3 compatible PC builds you can customize or order.",
-  steps: [
-    'Set use case, budget, and city in the left panel, then “Get recommendations”',
-    'Or type in chat, e.g. “Gaming 100000 Karachi”',
-    'Or upload / camera-detect components first, then add criteria',
-  ],
+const QUICK_CHAT_EXAMPLE = 'Gaming pc build 1.20 lakh Karachi';
+
+function ChatOnboarding({ onPanelRecommend, onChatExample, onUpload, onCamera }) {
+  return (
+    <div className="chat-onboarding" role="region" aria-label="How to get started">
+      <div className="chat-onboarding-hero">
+        <img
+          src={chatbotHeaderLogo}
+          alt=""
+          className="chat-onboarding-logo"
+          aria-hidden="true"
+        />
+        <p className="chat-onboarding-eyebrow">GenSpark Build Assistant</p>
+        <h2 className="chat-onboarding-title">Start your custom PC build</h2>
+        <p className="chat-onboarding-lead">
+          Share your use case and budget — get compatible parts, AI recommendations, and up to three
+          curated builds you can compare and order.
+        </p>
+      </div>
+
+      <div className="chat-onboarding-grid">
+        <button type="button" className="chat-onboarding-card" onClick={onPanelRecommend}>
+          <span className="chat-onboarding-card-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v18M3 12a9 9 0 0 0 18 0 9 9 0 0 0-18 0" />
+            </svg>
+          </span>
+          <span className="chat-onboarding-card-title">Criteria panel</span>
+          <span className="chat-onboarding-card-desc">
+            Set use case, budget & city on the left, then run Get recommendations.
+          </span>
+        </button>
+
+        <button type="button" className="chat-onboarding-card" onClick={onChatExample}>
+          <span className="chat-onboarding-card-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </span>
+          <span className="chat-onboarding-card-title">Chat in natural language</span>
+          <span className="chat-onboarding-card-desc">
+            Try: <em>Gaming 1.20 lakh Karachi</em> — we parse budget and purpose automatically.
+          </span>
+        </button>
+
+        <button type="button" className="chat-onboarding-card chat-onboarding-card--wide" onClick={onUpload}>
+          <span className="chat-onboarding-card-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </span>
+          <span className="chat-onboarding-card-title">Upload a component photo</span>
+          <span className="chat-onboarding-card-desc">
+            Detect mouse, keyboard, monitor, or RAM — then add budget for a tailored quote.
+          </span>
+        </button>
+
+        <button type="button" className="chat-onboarding-card chat-onboarding-card--wide" onClick={onCamera}>
+          <span className="chat-onboarding-card-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          </span>
+          <span className="chat-onboarding-card-title">Live camera detection</span>
+          <span className="chat-onboarding-card-desc">
+            Point your camera at hardware; bounding boxes show what we recognize in real time.
+          </span>
+        </button>
+      </div>
+
+      <p className="chat-onboarding-hint">
+        Type a message below or use <strong>+</strong> for upload and camera options.
+      </p>
+    </div>
+  );
+}
+
+const SLOT_LABELS = {
+  cpu: 'CPU',
+  gpu: 'GPU',
+  motherboard: 'Motherboard',
+  ram: 'RAM',
+  storage: 'Storage',
+  psu: 'PSU',
+  case: 'Case',
 };
+
+// One-tap starter prompts shown above the chat input (guides first-time users).
+const QUICK_PROMPTS = [
+  { label: 'Gaming PC under 120K', text: 'Gaming PC under 120000' },
+  { label: 'Editing PC under 150K', text: 'Editing PC under 150000' },
+  { label: 'Office PC Build', text: 'Office PC build 60000' },
+  { label: 'Detect components from image', image: true },
+];
 
 const Chatbot = () => {
   const navigate = useNavigate();
   const { userRequirements, updateRequirements, setSelectedBuild, setBuilds } = useApp();
+  const { addToCart, applyCartFromServer } = useCart();
 
-  const [messages, setMessages] = useState(() => [
-    { ...WELCOME_MESSAGE, timestamp: new Date() },
-  ]);
+  const [messages, setMessages] = useState([]);
+  const showOnboarding = !messages.some((m) => m.type === 'user');
   const [purpose, setPurpose] = useState(userRequirements.purpose || '');
   const [budget, setBudget] = useState(userRequirements.budget || '');
   const [city, setCity] = useState(userRequirements.city || '');
   const [textInput, setTextInput] = useState('');
   const [detectedComponents, setDetectedComponents] = useState([]);
-  const [compatibilityAlerts, setCompatibilityAlerts] = useState([]);
   const [suggestedBuilds, setSuggestedBuilds] = useState([]);
+  /** Template cards (Performance / Balanced / Budget) — only after explicit recommend request */
+  const [showSuggestedBuilds, setShowSuggestedBuilds] = useState(false);
   const [previewBuild, setPreviewBuild] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [detectionLoading, setDetectionLoading] = useState(false);
@@ -168,6 +293,23 @@ const Chatbot = () => {
   const chatInputRef = useRef(null);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const plusMenuRef = useRef(null);
+  const [purposeOpen, setPurposeOpen] = useState(false);
+  const purposeRef = useRef(null);
+  /** OpenAI Markdown from /api/recommend-build */
+  const [aiRecommendationMarkdown, setAiRecommendationMarkdown] = useState(null);
+  // Deterministic rule-based compatibility verdict from the backend (recommend-build).
+  const [aiCompatibility, setAiCompatibility] = useState(null);
+  const [geminiPartsPayload, setGeminiPartsPayload] = useState(null);
+  // Real DB component rows from the DB-driven recommend-build (build_components).
+  // When present, "Add to cart" uses these IDs directly — no name re-resolution.
+  const [buildComponents, setBuildComponents] = useState(null);
+  const [erpSaving, setErpSaving] = useState(false);
+  const [erpBanner, setErpBanner] = useState(null);
+
+  /** Keep left-panel criteria synced with global app requirements. */
+  useEffect(() => {
+    updateRequirements({ purpose, budget, city });
+  }, [purpose, budget, city, updateRequirements]);
 
   useEffect(() => {
     const el = chatOutputRef.current;
@@ -254,20 +396,15 @@ const Chatbot = () => {
       if (cancelled || inflight || !video?.videoWidth) return;
       inflight = true;
       try {
-        const width = video.videoWidth;
-        const height = video.videoHeight;
-        const c = document.createElement('canvas');
-        c.width = width;
-        c.height = height;
-        const ctx = c.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(video, 0, 0, width, height);
+        const frame = captureFrameFromVideo(video);
+        if (!frame || cancelled) return;
+        const { canvas, width, height } = frame;
         const blob = await new Promise((resolve) => {
-          c.toBlob((b) => resolve(b), 'image/jpeg', 0.82);
+          canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92);
         });
         if (!blob || cancelled) return;
         const file = new File([blob], `live-${Date.now()}.jpg`, { type: 'image/jpeg' });
-        const data = await postDetectComponent(file, { confidence: 0.35 });
+        const data = await postDetectComponent(file, { confidence: LIVE_DETECT_CONF });
         if (cancelled) return;
         setCameraPreviewOverlay({
           vidW: width,
@@ -281,7 +418,7 @@ const Chatbot = () => {
       }
     };
 
-    const id = setInterval(runFrame, 3000);
+    const id = setInterval(runFrame, 2000);
     const kick = setTimeout(runFrame, 600);
     return () => {
       cancelled = true;
@@ -306,6 +443,27 @@ const Chatbot = () => {
       document.removeEventListener('click', onDocClick, true);
     };
   }, [plusMenuOpen]);
+
+  useEffect(() => {
+    if (!purposeOpen) return undefined;
+    const onDocClick = (e) => {
+      if (purposeRef.current && !purposeRef.current.contains(e.target)) {
+        setPurposeOpen(false);
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setPurposeOpen(false);
+    };
+    const timer = window.setTimeout(() => {
+      document.addEventListener('click', onDocClick, true);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('click', onDocClick, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [purposeOpen]);
 
   useEffect(() => {
     if (!cameraActive) return;
@@ -346,15 +504,17 @@ const Chatbot = () => {
     }
 
     const userMsgId = addUserMessage(sourceLabel, imageUrl);
+    setShowSuggestedBuilds(false);
+    setSuggestedBuilds([]);
+    setPreviewBuild(null);
     setIsTyping(true);
     setDetectionLoading(true);
+    const replyStartedAt = Date.now();
 
     try {
       const data = await postDetectComponent(file, options);
       const components = data.detections || [];
       setDetectedComponents(components);
-      setCompatibilityAlerts(getCompatibilityAlerts(components, Number(budget)));
-
       if (options.cameraOverlay) {
         setCameraPreviewOverlay({
           vidW: options.cameraOverlay.width,
@@ -383,6 +543,7 @@ const Chatbot = () => {
       }
 
       if (components.length === 0) {
+        await waitForChatReply(replyStartedAt);
         addBotMessage(
           'I analyzed the image but did not detect mouse, keyboard, monitor, or RAM. Upload the component photo directly (not a chat screenshot), with the part centered on a plain background and good lighting.'
         );
@@ -395,9 +556,11 @@ const Chatbot = () => {
           return `${row.displayName}${row.confidence ? ` (${row.confidence}% confidence)` : ''}`;
         })
         .join(', ');
+      await waitForChatReply(replyStartedAt);
       addBotMessage(`Detection complete: ${summary}.`, { type: 'detection', components });
     } catch (error) {
       if (options.cameraOverlay) setCameraPreviewOverlay(null);
+      await waitForChatReply(replyStartedAt);
       addBotMessage(formatDetectionError(error.message));
     } finally {
       setDetectionLoading(false);
@@ -405,61 +568,419 @@ const Chatbot = () => {
     }
   };
 
-  const runRecommendations = (overrides = {}) => {
-    const p = overrides.purpose ?? purpose;
-    const b = overrides.budget ?? budget;
+  const getCurrentDetectedPart = () => {
+    const labels = detectedComponents
+      .map(normalizeDetectionForUi)
+      .filter((c) => !c.isUnknown)
+      .map((c) => c.displayName || c.class_name || c.rawGuess)
+      .filter(Boolean);
+    return labels.length ? labels.join(', ') : 'None';
+  };
+
+  const fetchAiRecommendations = async (overrides = {}) => {
+    const replyStartedAt = Date.now();
+    const msg = (overrides.message || '').trim();
+    const pureGreeting = Boolean(msg && isPureGreetingMessage(msg));
+    const parsedBudgetFromMsg = msg ? parseBudgetFromChat(msg) : '';
+    const parsedPurposeFromMsg = msg ? parsePurposeFromChat(msg) : '';
+
+    const buildRequested = pureGreeting
+      ? false
+      : Boolean(
+          overrides.build_requested || (msg ? hasBuildIntentFromChat(msg) : false)
+        );
+
+    // Instant greeting — no network wait (backend is ~10ms but UI felt slow)
+    if (pureGreeting && !buildRequested) {
+      const guide = buildGuideGreetingResponse();
+      const badge = getAiSourceBadge(AI_SOURCE.GUIDE);
+      await waitForChatReply(replyStartedAt);
+      addBotMessage('', {
+        type: 'ai_recommendation',
+        markdown: guide.recommendation_markdown,
+        source: AI_SOURCE.GUIDE,
+        sourceLabel: `${badge.icon} ${badge.label}`,
+        geminiActive: false,
+        isFallback: false,
+      });
+      setSuggestedBuilds([]);
+      setShowSuggestedBuilds(false);
+      return;
+    }
+
+    const p = pureGreeting
+      ? parsedPurposeFromMsg || ''
+      : overrides.purpose ||
+        parsedPurposeFromMsg ||
+        (buildRequested ? purpose || 'Gaming' : '');
+    const b = pureGreeting
+      ? parsedBudgetFromMsg || ''
+      : overrides.budget || parsedBudgetFromMsg || (buildRequested ? budget : '');
     const c = overrides.city ?? city;
-    updateRequirements({ purpose: p, budget: b, city: c });
-    setPurpose(p);
-    setBudget(b);
+
+    if (p && !pureGreeting) setPurpose(p);
+    if (b && !pureGreeting) setBudget(b);
     setCity(c);
-    const builds = generateBuilds(p || 'Gaming', Number(b) || 100000, c);
-    setSuggestedBuilds(builds);
-    setBuilds(builds);
-    setCompatibilityAlerts(getCompatibilityAlerts(detectedComponents, Number(b)));
-    addBotMessage("I've generated **3 optimized builds** based on your inputs and any detected components. Check the cards below — you can **Customize**, **Save**, or **Proceed to vendor**.", { type: 'builds_ready' });
+    updateRequirements({
+      purpose: p || purpose,
+      budget: b || budget,
+      city: c,
+    });
+
+    try {
+      const payload = {
+        detected_part: getCurrentDetectedPart(),
+        build_requested: buildRequested,
+        message: msg || undefined,
+      };
+      const budgetLabel = b ? formatBudgetPkr(b) : '';
+      if (budgetLabel) payload.budget = budgetLabel;
+      if (p) payload.purpose = p;
+
+      let data;
+      try {
+        data = await postRecommendBuild(payload);
+      } catch (apiError) {
+        if (pureGreeting && !buildRequested) {
+          data = buildGuideGreetingResponse();
+        } else {
+          throw apiError;
+        }
+      }
+
+      if (data.conversational && !data.recommendation_markdown) {
+        data.recommendation_markdown = GUIDE_GREETING_MARKDOWN;
+      }
+
+      let markdown = String(data.recommendation_markdown || '').trim();
+      if (!markdown && !data.conversational) {
+        markdown = buildMarkdownFromFallbackBuild(
+          data.fallback_build,
+          data.purpose || p,
+          data.budget || budgetLabel
+        );
+      }
+      if (!markdown && !data.conversational) {
+        markdown =
+          '## Summary\n\nCould not load the build table. Restart with **START-GENSPARK-DEV.bat**, hard-refresh (**Ctrl+F5**), then send your budget and purpose again.';
+      }
+      const { parts: parsedParts } = extractGeminiBuildSlots(markdown);
+      const mergedParts =
+        data.fallback_build && typeof data.fallback_build === 'object'
+          ? { ...data.fallback_build, ...parsedParts }
+          : parsedParts;
+      if (data.conversational) {
+        setAiRecommendationMarkdown(null);
+        setGeminiPartsPayload(null);
+        setBuildComponents(null);
+        setAiCompatibility(null);
+      } else {
+        setAiRecommendationMarkdown(markdown);
+        setAiCompatibility(data.compatibility || null);
+        setGeminiPartsPayload(
+          Object.keys(mergedParts).length ? mergedParts : null
+        );
+        setBuildComponents(
+          Array.isArray(data.build_components) && data.build_components.length
+            ? data.build_components
+            : null
+        );
+      }
+
+      const fallbackNotice = data.fallback
+        ? formatGeminiFallbackNotice(data.fallback_reason)
+        : null;
+      const badge = getAiSourceBadge(data.source, {
+        conversational: data.conversational,
+        fallback: data.fallback,
+        openaiConfigured: Boolean(data.openai_configured),
+        fallbackReason: data.fallback_reason,
+        intentBadge: data.intent_badge,
+      });
+      await waitForChatReply(replyStartedAt);
+      addBotMessage('', {
+        type: 'ai_recommendation',
+        markdown,
+        source: badge.source,
+        geminiActive: badge.geminiActive,
+        isFallback: Boolean(data.fallback),
+        fallbackNotice,
+        purpose: data.purpose || p,
+        budget: data.budget || budgetLabel,
+        // Real catalog rows → enable an inline "Add to cart" on this build card.
+        buildComponents:
+          Array.isArray(data.build_components) && data.build_components.length
+            ? data.build_components
+            : null,
+        totalPrice: data.total_price || null,
+        // Deterministic rule-based verdict (compatible/score/checks/failures).
+        compatibility: data.compatibility || null,
+      });
+
+      const hasEngineTable = /##\s*Recommended Components/i.test(markdown);
+      if ((buildRequested || !data.conversational) && !hasEngineTable) {
+        const builds = generateBuilds(
+          p || purpose || 'Gaming',
+          Number(b || budget) || 100000,
+          c
+        );
+        setSuggestedBuilds(builds);
+        setBuilds(builds);
+        setShowSuggestedBuilds(true);
+      } else {
+        setSuggestedBuilds([]);
+        setShowSuggestedBuilds(false);
+      }
+    } catch (error) {
+      setAiRecommendationMarkdown(null);
+      setGeminiPartsPayload(null);
+      setBuildComponents(null);
+      setAiCompatibility(null);
+
+      if (pureGreeting && !buildRequested) {
+        const guide = buildGuideGreetingResponse();
+        await waitForChatReply(replyStartedAt);
+        addBotMessage('', {
+          type: 'ai_recommendation',
+          markdown: guide.recommendation_markdown,
+          source: AI_SOURCE.GUIDE,
+          sourceLabel: `${getAiSourceBadge(AI_SOURCE.GUIDE).icon} ${getAiSourceBadge(AI_SOURCE.GUIDE).label}`,
+          geminiActive: false,
+          isFallback: false,
+        });
+        setSuggestedBuilds([]);
+        setShowSuggestedBuilds(false);
+        return;
+      }
+
+      const isTimeout =
+        /timed out|timeout|econnaborted/i.test(String(error?.message || ''));
+      const isUnreachable =
+        /not reachable|failed to fetch|connection refused|network error/i.test(
+          String(error?.message || '')
+        );
+
+      if (buildRequested && (isTimeout || isUnreachable)) {
+        setSuggestedBuilds([]);
+        setShowSuggestedBuilds(false);
+        await waitForChatReply(replyStartedAt);
+        addBotMessage(formatDetectionError(error.message));
+      } else if (buildRequested) {
+        const builds = generateBuilds(
+          p || purpose || 'Gaming',
+          Number(b || budget) || 100000,
+          c
+        );
+        setSuggestedBuilds(builds);
+        setBuilds(builds);
+        setShowSuggestedBuilds(true);
+        await waitForChatReply(replyStartedAt);
+        addBotMessage(
+          `${formatDetectionError(error.message)} Showing template builds below.`,
+          { type: 'builds_ready' }
+        );
+      } else {
+        setSuggestedBuilds([]);
+        setShowSuggestedBuilds(false);
+        await waitForChatReply(replyStartedAt);
+        addBotMessage(formatDetectionError(error.message));
+      }
+    }
+  };
+
+  const handleAddToCart = async (componentsArg) => {
+    // Preferred path: the DB-driven recommend-build already resolved every slot to
+    // a real catalog row, so add those component IDs straight to the cart — no
+    // name re-resolution. Uses /add-to-cart (vendor auto-assigned by the backend).
+    // componentsArg lets each chat build card add its OWN build (falls back to state).
+    const comps = Array.isArray(componentsArg) ? componentsArg : buildComponents;
+    if (Array.isArray(comps) && comps.length) {
+      setErpSaving(true);
+      let added = 0;
+      try {
+        const failedLabels = [];
+        const seen = new Set();
+        for (const comp of comps) {
+          const id = comp?.component_id ?? comp?.id;
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          const ok = await addToCart({ id, item_type: 'component', vendor_id: null }, 1, { silent: true });
+          if (ok) added += 1;
+          else failedLabels.push(comp.label || comp.name || `#${id}`);
+        }
+        if (added > 0) {
+          setErpBanner({
+            type: 'success',
+            message: failedLabels.length
+              ? `Added ${added} part(s) to cart. Could not add: ${failedLabels.join(', ')}.`
+              : `Added ${added} part(s) to cart. Open the cart to review your total.`,
+          });
+        } else {
+          setErpBanner({
+            type: 'error',
+            message: 'Could not add these parts — they may be out of stock right now. Try another budget.',
+          });
+        }
+      } catch (error) {
+        setErpBanner({ type: 'error', message: formatDetectionError(error.message) });
+      } finally {
+        setErpSaving(false);
+      }
+      return added;
+    }
+
+    let partsMap = null;
+
+    if (aiRecommendationMarkdown || geminiPartsPayload) {
+      const { parts, missing } = extractGeminiBuildSlots(
+        aiRecommendationMarkdown,
+        geminiPartsPayload
+      );
+      if (missing.length) {
+        setErpBanner({
+          type: 'error',
+          message: `Missing parts in AI table: ${missing.join(', ')}. Pick a suggested build or adjust your budget.`,
+        });
+        return 0;
+      }
+      partsMap = parts;
+    } else {
+      const buildParts =
+        previewBuild?.parts ||
+        (suggestedBuilds.length ? suggestedBuilds[0]?.parts : null);
+      if (buildParts?.length) {
+        const labelToKey = Object.fromEntries(
+          Object.entries(SLOT_LABELS).map(([k, label]) => [label, k])
+        );
+        partsMap = Object.fromEntries(
+          buildParts
+            .filter((p) => p.name && p.value && !/^integrated$/i.test(String(p.value)))
+            .map((p) => [labelToKey[p.name] || String(p.name).toLowerCase(), p.value])
+        );
+      }
+    }
+
+    if (!partsMap || !Object.keys(partsMap).length) {
+      setErpBanner({
+        type: 'error',
+        message: 'No AI build to add. Run Get recommendations first.',
+      });
+      return 0;
+    }
+
+    setErpSaving(true);
+    let fallbackAdded = 0;
+    try {
+      const result = await addBuildPartsBulk(partsMap);
+      if (result.cart) {
+        applyCartFromServer(result.cart);
+      }
+
+      const addedCount = Number(result.added_count || 0);
+      fallbackAdded = addedCount;
+      const failed = Array.isArray(result.failed) ? result.failed : [];
+
+      if (addedCount > 0) {
+        const names = (result.added || [])
+          .map((row) => row.catalog_name || row.label)
+          .filter(Boolean)
+          .slice(0, 4);
+        const summary = names.length ? names.join(', ') : `${addedCount} components`;
+        setErpBanner({
+          type: 'success',
+          message: `Added ${addedCount} part(s) to cart (${summary}${addedCount > 4 ? '…' : ''}). Open cart to review total.`,
+        });
+      }
+
+      if (failed.length && addedCount === 0) {
+        setErpBanner({
+          type: 'error',
+          message:
+            'No parts matched the catalog. Add Montech/CPU/GPU names to the components table or use Components page.',
+        });
+        return 0;
+      }
+
+      if (failed.length && addedCount > 0) {
+        setErpBanner({
+          type: 'success',
+          message: `Added ${addedCount} part(s). Could not match: ${failed.map((f) => f.slot).join(', ')}.`,
+        });
+      }
+    } catch (error) {
+      setErpBanner({
+        type: 'error',
+        message: formatDetectionError(error.message),
+      });
+    } finally {
+      setErpSaving(false);
+    }
+    return fallbackAdded;
+  };
+
+  // Sidebar "Build preview" action: add the current build, then take the user to
+  // the cart to review and check out. The in-card CTA adds inline (no navigation).
+  const handleAddBuildAndReview = async () => {
+    const added = await handleAddToCart();
+    if (added > 0) navigate('/cart');
+  };
+
+  // Core send pipeline — shared by the input form and the quick-prompt chips.
+  const submitMessage = (rawInput) => {
+    const raw = String(rawInput || '').trim();
+    if (!raw || isTyping) return;
+
+    addUserMessage(raw);
+
+    const { budget: parsedBudgetNum, purpose: parsedPurpose } = parseChatIntent(raw);
+    const parsedBudget = parsedBudgetNum != null ? String(parsedBudgetNum) : '';
+    if (parsedPurpose) setPurpose(parsedPurpose);
+    if (parsedBudget) setBudget(parsedBudget);
+    setTextInput('');
+
+    const pureGreeting = isPureGreetingMessage(raw);
+    const hasBuildIntent = !pureGreeting && hasBuildIntentFromChat(raw);
+    setShowSuggestedBuilds(hasBuildIntent);
+
+    setIsTyping(true);
+    fetchAiRecommendations({
+      message: raw,
+      purpose: parsedPurpose || undefined,
+      budget: parsedBudget || undefined,
+      city,
+      build_requested: hasBuildIntent,
+    }).finally(() => {
+      setIsTyping(false);
+    });
   };
 
   const handleTextSubmit = (e) => {
     e.preventDefault();
-    const raw = (textInput || `${purpose} ${budget} ${city}`).trim();
-    if (!raw && !purpose && !budget) return;
+    submitMessage(textInput);
+  };
 
-    const display = raw || `Purpose: ${purpose}, Budget: PKR ${budget}, City: ${city}`;
-    addUserMessage(display);
-
-    const numMatch = raw.match(/\d{4,}/);
-    const parsedBudget = numMatch ? numMatch[0] : budget;
-    const lower = raw.toLowerCase();
-    let parsedPurpose = purpose;
-    if (lower.includes('gaming')) parsedPurpose = 'Gaming';
-    else if (lower.includes('office')) parsedPurpose = 'Office';
-    else if (lower.includes('content') || lower.includes('creator')) parsedPurpose = 'Content Creation';
-    setPurpose(parsedPurpose);
-    setBudget(parsedBudget);
-    setTextInput('');
-
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      runRecommendations({ purpose: parsedPurpose, budget: parsedBudget, city });
-    }, 1200);
+  /** Quick-prompt chip: either send a canned prompt or open image detection. */
+  const handleQuickPrompt = (chip) => {
+    if (isTyping) return;
+    if (chip.image) {
+      galleryInputRef.current?.click();
+      return;
+    }
+    submitMessage(chip.text);
   };
 
   const handleGetRecommendations = () => {
     addUserMessage(`Purpose: ${purpose || 'Gaming'}, Budget: PKR ${budget || '100000'}, City: ${city || '—'}`);
+    setShowSuggestedBuilds(true);
     setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      runRecommendations();
-    }, 1200);
+    fetchAiRecommendations({ build_requested: true }).finally(() => setIsTyping(false));
   };
 
   const handleImageUpload = (e) => {
     const file = e.target?.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-    analyzeImageFile(file, 'Uploaded component image', url, { confidence: 0.55 });
+    analyzeImageFile(file, 'Uploaded component image', url, { confidence: UPLOAD_DETECT_CONF });
     e.target.value = '';
   };
 
@@ -467,17 +988,12 @@ const Chatbot = () => {
     const video = centerVideoRef.current;
     if (!video || !streamRef.current) return;
 
-    const width = video.videoWidth || video.clientWidth || 640;
-    const height = video.videoHeight || video.clientHeight || 480;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
+    const frame = captureFrameFromVideo(video);
+    if (!frame) {
       addBotMessage('Could not prepare the camera frame. Please try again or upload a picture.');
       return;
     }
-    ctx.drawImage(video, 0, 0, width, height);
+    const { canvas, width, height } = frame;
 
     canvas.toBlob((blob) => {
       if (!blob) {
@@ -488,45 +1004,126 @@ const Chatbot = () => {
       const file = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' });
       const url = URL.createObjectURL(file);
       analyzeImageFile(file, 'Captured from live camera', url, {
-        confidence: 0.35,
+        confidence: UPLOAD_DETECT_CONF,
         cameraOverlay: { width, height },
       });
     }, 'image/jpeg', 0.92);
   };
 
-  const handleCustomize = (build) => {
+  const handleSelectBuild = (build) => {
     setSelectedBuild(build);
     setPreviewBuild(build);
-    navigate('/configurator');
   };
 
-  const handleSaveBuild = (build) => {
-    setPreviewBuild(build);
-    addBotMessage(`Saved **${build.title}** to preview. You can Customize or Proceed when ready.`, { type: 'saved' });
-  };
-
-  const handleProceed = (build) => {
+  const handleProceed = async (build) => {
     setSelectedBuild(build);
+    setPreviewBuild(build);
     setBuilds(suggestedBuilds.length ? suggestedBuilds : [build]);
-    navigate('/vendor-assignment');
+
+    if (!build?.parts?.length) {
+      navigate('/vendor-assignment');
+      return;
+    }
+
+    // Same path as the prebuilt PCs: resolve each part name to a real in-stock
+    // catalog component, then add by ID via /add-to-cart (vendor auto-assigned).
+    // No /cart/add-build-parts (that route 404s on the Dashboard backend).
+    setErpSaving(true);
+    let added = 0;
+    try {
+      // Suggested builds carry parts as a 7-string array in slot order; prebuilt /
+      // AI builds carry {name, value}. Normalise to {name, value} for the resolver.
+      const SLOT_ORDER = ['CPU', 'GPU', 'Motherboard', 'RAM', 'Storage', 'PSU', 'Case'];
+      const partsArray = build.parts.map((p, i) =>
+        p && typeof p === 'object'
+          ? p
+          : { name: SLOT_ORDER[i] || `Part ${i + 1}`, value: String(p) }
+      );
+      const { slots } = await resolveBuildParts(partsArray);
+      const result = await addResolvedBuildToCart(slots, addToCart, { silent: true });
+      added = result.added;
+      if (added > 0) {
+        setErpBanner({
+          type: 'success',
+          message: result.failed.length
+            ? `Added ${added} part(s) to cart. Could not match: ${result.failed.join(', ')}.`
+            : `Added ${added} part(s) to cart — choose a vendor to continue.`,
+        });
+      } else {
+        setErpBanner({
+          type: 'error',
+          message: 'Could not add this build — parts may be out of stock. Try another build or budget.',
+        });
+      }
+    } catch (error) {
+      setErpBanner({ type: 'error', message: formatDetectionError(error.message) });
+    } finally {
+      setErpSaving(false);
+    }
+
+    if (added > 0) navigate('/vendor-assignment');
+  };
+
+  const handleQuickPanelRecommend = () => {
+    if (!purpose) setPurpose('Gaming');
+    if (!budget) setBudget('100000');
+    handleGetRecommendations();
+  };
+
+  const handleQuickChatExample = () => {
+    setTextInput(QUICK_CHAT_EXAMPLE);
+    chatInputRef.current?.focus();
   };
 
   const handleNewChat = () => {
-    setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
+    setMessages([]);
     setDetectedComponents([]);
-    setCompatibilityAlerts([]);
     setSuggestedBuilds([]);
+    setShowSuggestedBuilds(false);
     setPreviewBuild(null);
     setDetectedImageUrl(null);
     setCameraPreviewOverlay(null);
     setLiveDetectOn(false);
+    setAiRecommendationMarkdown(null);
+    setGeminiPartsPayload(null);
+    setBuildComponents(null);
+    setAiCompatibility(null);
+    setErpBanner(null);
     if (detectedImageUrl) URL.revokeObjectURL(detectedImageUrl);
   };
 
   const displayBuild = previewBuild ?? suggestedBuilds[0] ?? null;
 
+  // Newest chat recommendation that resolved to real catalog parts — the inline
+  // card customizer renders under THIS message (wired to the live build state).
+  let latestBuildMsgId = null;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const p = messages[i]?.payload;
+    if (p?.type === 'ai_recommendation' && Array.isArray(p.buildComponents) && p.buildComponents.length) {
+      latestBuildMsgId = messages[i].id;
+      break;
+    }
+  }
+
   return (
     <div className="chatbot-recommendation-page">
+      {erpBanner && (
+        <div
+          className={`erp-toast erp-toast--${erpBanner.type}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="erp-toast-message">{erpBanner.message}</span>
+          <button
+            type="button"
+            className="erp-toast-dismiss"
+            onClick={() => setErpBanner(null)}
+            aria-label="Dismiss notification"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="recommendation-layout">
         <aside className="recommendation-sidebar">
           <div className="sidebar-header">
@@ -546,12 +1143,47 @@ const Chatbot = () => {
                 </span>
                 What will you use it for?
               </label>
-              <select value={purpose} onChange={(e) => setPurpose(e.target.value)} className="sidebar-input" aria-label="Use case">
-                <option value="">Select use case</option>
-                <option value="Gaming">Gaming</option>
-                <option value="Office">Office</option>
-                <option value="Content Creation">Content Creation</option>
-              </select>
+              <div className="custom-select" ref={purposeRef}>
+                <button
+                  type="button"
+                  className={`custom-select-trigger${purposeOpen ? ' is-open' : ''}${purpose ? '' : ' is-placeholder'}`}
+                  onClick={() => setPurposeOpen((o) => !o)}
+                  aria-haspopup="listbox"
+                  aria-expanded={purposeOpen}
+                  aria-label="Use case"
+                >
+                  <span className="custom-select-value">
+                    {purpose ? PURPOSE_OPTIONS.find((o) => o.value === purpose)?.label : 'Select use case'}
+                  </span>
+                  <svg className="custom-select-caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                {purposeOpen && (
+                  <ul className="custom-select-menu" role="listbox" aria-label="Use case options">
+                    {PURPOSE_OPTIONS.map((opt) => (
+                      <li
+                        key={opt.value}
+                        role="option"
+                        aria-selected={purpose === opt.value}
+                        className={`custom-select-option${purpose === opt.value ? ' is-selected' : ''}`}
+                        onClick={() => {
+                          setPurpose(opt.value);
+                          setPurposeOpen(false);
+                        }}
+                      >
+                        <span className="custom-select-option-icon" aria-hidden>{opt.icon}</span>
+                        <span>{opt.label}</span>
+                        {purpose === opt.value && (
+                          <svg className="custom-select-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
             <div className="sidebar-field">
               <label className="sidebar-label">
@@ -583,7 +1215,7 @@ const Chatbot = () => {
                   <path d="M12 3v18M3 12a9 9 0 0 0 18 0 9 9 0 0 0-18 0" />
                 </svg>
               </span>
-              Get recommendations
+              Generate My Build
             </button>
           </div>
           <div className="sidebar-tip">
@@ -605,7 +1237,7 @@ const Chatbot = () => {
               </div>
               <div className="center-header-text">
                 <p className="center-header-sub">
-                  Use the criteria panel or chat to refine your build — up to 3 compatible options to compare and customize.
+                  Define your use case and budget in the criteria panel or chat to receive up to three curated, compatible build configurations for comparison.
                 </p>
               </div>
             </div>
@@ -654,10 +1286,32 @@ const Chatbot = () => {
             </div>
           )}
 
-          <div className="chat-output" ref={chatOutputRef}>
+          <div
+            className={`chat-output ${showOnboarding ? 'chat-output--onboarding' : ''}`}
+            ref={chatOutputRef}
+          >
+            {showOnboarding && (
+              <ChatOnboarding
+                onPanelRecommend={handleQuickPanelRecommend}
+                onChatExample={handleQuickChatExample}
+                onUpload={() => galleryInputRef.current?.click()}
+                onCamera={() => {
+                  setCameraActive(true);
+                  setLiveDetectOn(true);
+                }}
+              />
+            )}
             {messages.map((msg) => (
-              <div key={msg.id} className={`chat-message ${msg.type} ${msg.id === 'welcome' ? 'message-welcome' : ''}`}>
-                <div className="message-avatar">{msg.type === 'bot' ? 'AI' : '👤'}</div>
+              <div key={msg.id} className={`chat-message ${msg.type}`}>
+                {msg.type === 'bot' ? (
+                  <div className="message-avatar">AI</div>
+                ) : (
+                  <div className="message-avatar message-avatar--user">
+                    <div className="user-avatar-icon" aria-hidden="true">
+                      <User size={16} strokeWidth={2.5} />
+                    </div>
+                  </div>
+                )}
                 <div className="message-body">
                   {msg.imageUrl &&
                     (Array.isArray(msg.detections) && msg.detections.length > 0 ? (
@@ -671,16 +1325,7 @@ const Chatbot = () => {
                     ) : (
                       <img src={msg.imageUrl} alt="Upload" className="message-img" />
                     ))}
-                  {msg.id === 'welcome' && msg.intro ? (
-                    <div className="message-welcome-content">
-                      <p className="message-intro">{msg.intro}</p>
-                      <ul className="message-steps" aria-label="How to get started">
-                        {msg.steps?.map((step, i) => (
-                          <li key={i}>{step}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : msg.payload?.type === 'detection' && msg.payload.components?.length > 0 ? (
+                  {msg.payload?.type === 'detection' && msg.payload.components?.length > 0 ? (
                     <div className="detection-result-card">
                       <div className="detection-result-header">
                         <span className="detection-live-indicator" aria-hidden>
@@ -716,7 +1361,47 @@ const Chatbot = () => {
                           );
                         })}
                       </div>
-                      <p className="detection-next-step">Add purpose and budget, then click Get Recommendations for full builds.</p>
+                      <p className="detection-next-step">
+                        Component saved for your build. Set purpose and budget on the left, then click
+                        {' '}
+                        <strong>Get recommendations</strong>
+                        {' '}
+                        when you are ready for full PC options.
+                      </p>
+                    </div>
+                  ) : msg.payload?.type === 'ai_recommendation' ? (
+                    <div className="ai-recommendation-wrap">
+                      {msg.payload.markdown ? (
+                        <div className="ai-recommendation-markdown ai-recommendation-markdown--enhanced">
+                          <BuildRecommendationCard
+                            markdown={msg.payload.markdown}
+                            purpose={msg.payload.purpose}
+                            budget={msg.payload.budget}
+                            buildComponents={msg.payload.buildComponents}
+                            compatibility={msg.payload.compatibility}
+                            onAddToCart={(comps) => handleAddToCart(comps)}
+                            adding={erpSaving}
+                            editable={msg.id === latestBuildMsgId &&
+                              Array.isArray(buildComponents) && buildComponents.length > 0}
+                          />
+                          {msg.id === latestBuildMsgId &&
+                          Array.isArray(buildComponents) && buildComponents.length ? (
+                            <BuildCustomizer
+                              buildComponents={buildComponents}
+                              purpose={purpose}
+                              budget={budget ? Number(budget) : null}
+                              onApply={(rows) => setBuildComponents(rows)}
+                              onAddToCart={(comps) => handleAddToCart(comps)}
+                              adding={erpSaving}
+                            />
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {msg.payload.fallbackNotice ? (
+                        <p className="ai-fallback-notice" role="status">
+                          {msg.payload.fallbackNotice}
+                        </p>
+                      ) : null}
                     </div>
                   ) : (
                     <p>{msg.text}</p>
@@ -746,40 +1431,70 @@ const Chatbot = () => {
               </div>
             )}
 
-            {compatibilityAlerts.length > 0 && (
-              <div className="compatibility-alerts">
-                <h4>Compatibility & analysis</h4>
-                {compatibilityAlerts.map((a, i) => (
-                  <div key={i} className={`alert alert-${a.type}`}>{a.text}</div>
-                ))}
-              </div>
-            )}
-
-            {suggestedBuilds.length > 0 && (
+            {showSuggestedBuilds && suggestedBuilds.length > 0 && (
               <div className="suggested-builds">
                 <h3>Suggested builds</h3>
                 <div className="build-cards">
                   {suggestedBuilds.map((build) => (
-                    <div key={build.id} className="build-card">
-                      <div className="build-card-header">
+                    <article
+                      key={build.id}
+                      className={`build-card${previewBuild?.id === build.id ? ' build-card--selected' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSelectBuild(build)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSelectBuild(build);
+                        }
+                      }}
+                    >
+                      <div className="build-card-top">
                         <span className="build-type">{build.type}</span>
+                        <div className="build-price">
+                          <span className="build-price-label">PKR</span>
+                          {build.price.toLocaleString()}
+                        </div>
                       </div>
-                      <div className="build-price">PKR {build.price.toLocaleString()}</div>
                       <ul className="build-parts-list">
-                        {build.parts.slice(0, 5).map((p, i) => (
-                          <li key={i}>{p.name}: {p.value}</li>
+                        {build.parts.slice(0, 4).map((p, i) => (
+                          <li key={i}>
+                            <span className="build-part-key">{p.name}</span>
+                            <span className="build-part-val">{p.value}</span>
+                          </li>
                         ))}
                       </ul>
                       <div className="build-actions">
-                        <button type="button" className="btn btn-secondary" onClick={() => handleCustomize(build)}>Customize</button>
-                        <button type="button" className="btn btn-secondary" onClick={() => handleSaveBuild(build)}>Save</button>
-                        <button type="button" className="btn btn-primary" onClick={() => handleProceed(build)}>Proceed</button>
+                        <button
+                          type="button"
+                          className="btn btn-primary build-card-proceed"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleProceed(build);
+                          }}
+                        >
+                          Proceed
+                        </button>
                       </div>
-                    </div>
+                    </article>
                   ))}
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="chat-quick-prompts" role="group" aria-label="Quick prompts">
+            {QUICK_PROMPTS.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                className={`chat-quick-chip ${chip.image ? 'chat-quick-chip--accent' : ''}`}
+                onClick={() => handleQuickPrompt(chip)}
+                disabled={isTyping}
+              >
+                {chip.label}
+              </button>
+            ))}
           </div>
 
           <form className="chat-input-form" onSubmit={handleTextSubmit}>
@@ -817,7 +1532,16 @@ const Chatbot = () => {
                 </button>
                 {plusMenuOpen && (
                   <div className="chat-input-plus-menu" role="menu">
-                    <button type="button" role="menuitem" className="chat-plus-option" onClick={() => { setCameraActive(true); setPlusMenuOpen(false); }}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="chat-plus-option"
+                      onClick={() => {
+                        setCameraActive(true);
+                        setLiveDetectOn(true);
+                        setPlusMenuOpen(false);
+                      }}
+                    >
                       <span className="chat-plus-option-icon" aria-hidden>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                       </span>
@@ -842,7 +1566,7 @@ const Chatbot = () => {
                 ref={chatInputRef}
                 type="text"
                 className="chat-input"
-                placeholder="Ask anything"
+                placeholder="Ask for a build — e.g. “Gaming PC under 120K Karachi” — or “what is a GPU?”"
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 disabled={isTyping}
@@ -875,7 +1599,49 @@ const Chatbot = () => {
               <span className="preview-header-badge">Live</span>
             </div>
           </div>
-          {displayBuild ? (
+          {aiRecommendationMarkdown ? (
+            <div className="preview-ai-build">
+              <div className="preview-ai-build-scroll ai-recommendation-markdown ai-recommendation-markdown--enhanced">
+                <BuildRecommendationCard markdown={aiRecommendationMarkdown} purpose={purpose} budget={budget ? `PKR ${Number(budget).toLocaleString()}` : ''} compatibility={aiCompatibility} />
+              </div>
+              <div className="preview-cart-action">
+                <button
+                  type="button"
+                  className="preview-cart-btn"
+                  onClick={handleAddBuildAndReview}
+                  disabled={erpSaving || isTyping || !aiRecommendationMarkdown}
+                  aria-label="Add this build to cart and go to the cart to review"
+                >
+                  {erpSaving ? (
+                    <>
+                      <span className="preview-cart-btn-spinner" aria-hidden />
+                      <span className="preview-cart-btn-label">Adding to cart…</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="preview-cart-btn-icon"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        <circle cx="9" cy="21" r="1" />
+                        <circle cx="20" cy="21" r="1" />
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                      </svg>
+                      <span className="preview-cart-btn-label">Add to Cart &amp; Review</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : displayBuild ? (
             <div className="preview-build">
               <div className="preview-build-type">{displayBuild.type}</div>
               <h4>{displayBuild.title}</h4>

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile app/services/build_intelligence.py app/api/ai_build_routes.py)",
+      "Bash(python -m py_compile app/vendor/routes.py)",
+      "Bash(./.venv/Scripts/python.exe _verify_proof_guard.py)",
+      "Bash(./.venv/Scripts/python.exe -c \"import flask; print\\('flask OK ->', flask.__version__\\); print\\('path ->', flask.__file__\\)\")",
+      "Bash(ls -la .vscode/)",
+      "Bash(cat .vscode/settings.json)",
+      "Bash(python -m py_compile app/api/ai_build_routes.py)",
+      "Bash(.venv/Scripts/python.exe -m pip install pytest==8.3.4 -q)",
+      "Bash(.venv/Scripts/python.exe -c \"import pytest; print\\('pytest', pytest.__version__\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m '@ *)",
+      "Bash(git commit *)",
+      "Bash(rm .git/COMMIT_EDITMSG_TMP)"
+    ]
+  }
+}

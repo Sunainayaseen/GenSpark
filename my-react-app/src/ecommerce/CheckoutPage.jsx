@@ -99,10 +99,10 @@ const CheckoutPage = () => {
             <span>
               {it.name} × {it.quantity}
             </span>
-            <span>PKR {Number(it.line_total).toFixed(2)}</span>
+            <span>PKR {Number(it.line_total || 0).toFixed(2)}</span>
           </div>
         ))}
-        <p style={{ fontWeight: 800, marginTop: 8 }}>Total: PKR {Number(cart.total_amount).toFixed(2)}</p>
+        <p style={{ fontWeight: 800, marginTop: 8 }}>Total: PKR {Number(cart.total_amount || 0).toFixed(2)}</p>
       </div>
       <form onSubmit={onSubmit} className="ecom-form ecom-card" style={{ maxWidth: 560 }}>
         <div className="form-group">

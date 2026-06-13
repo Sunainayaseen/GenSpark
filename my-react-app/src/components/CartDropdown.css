@@ -181,20 +181,31 @@
 }
 
 .remove-btn {
-  width: 28px;
-  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 1rem;
-  opacity: 0.6;
+  color: var(--text-secondary, #64748b);
+  border-radius: 8px;
+  opacity: 0.8;
   transition: var(--transition);
   margin-left: var(--spacing-xs);
 }
 
+.remove-btn svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
 .remove-btn:hover {
   opacity: 1;
-  transform: scale(1.2);
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
 }
 
 .cart-footer {
@@ -245,8 +256,10 @@
 
 @media (max-width: 768px) {
   .cart-dropdown {
-    width: calc(100vw - 32px);
+    left: 16px;
     right: 16px;
+    width: auto;
+    max-width: none;
   }
 }
 

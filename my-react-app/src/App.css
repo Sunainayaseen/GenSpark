@@ -4,54 +4,59 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow-x: hidden;
+  overflow-x: clip;
+  max-width: 100%;
+  min-width: 0;
   background: var(--bg-primary);
 }
 
-/* Route lazy-load placeholder — keeps header/footer, replaces main only */
-.page-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md);
-  min-height: min(60vh, 560px);
-  padding: var(--spacing-2xl) var(--spacing-lg);
-  color: rgba(var(--primary-rgb), 0.85);
-}
-
-.page-loading .loading-spinner {
-  width: 28px;
-  height: 28px;
-  border-width: 3px;
-}
-
-/* Page Transition Animations */
-.main-content {
+/* Lightweight route load indicator (AI Assistant chunk only, usually) */
+.route-loading {
   position: relative;
+  min-height: 4px;
   width: 100%;
-  transition: opacity 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-              transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .main-content {
-    transition: none;
+.route-loading-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--primary) 35%,
+    var(--primary-dark) 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: route-loading-slide 0.85s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.35);
+}
+
+@keyframes route-loading-slide {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
   }
 }
 
-.main-content.page-enter {
-  opacity: 0;
-  transform: translateY(16px);
+.main-content {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex: 1;
+  overflow-x: clip;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
-.main-content.page-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.main-content.page-exit-active {
-  opacity: 0;
-  transform: translateY(-12px);
-  transition-duration: 0.25s;
+/* Nav click feedback */
+.nav a.nav-pending,
+.nav .nav-pending {
+  opacity: 0.72;
+  pointer-events: none;
 }

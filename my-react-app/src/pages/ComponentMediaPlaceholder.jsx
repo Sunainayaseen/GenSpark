@@ -5,26 +5,26 @@ import { useId } from 'react';
  */
 export default function ComponentMediaPlaceholder({ kind = 'generic' }) {
   const uid = useId().replace(/:/g, '');
-  const stroke = 'rgba(148, 163, 184, 0.55)';
-  const fill = 'rgba(56, 189, 248, 0.12)';
-  const accent = 'rgba(56, 189, 248, 0.65)';
+  const stroke = 'rgba(2, 69, 122, 0.35)';
+  const fill = 'rgba(2, 69, 122, 0.08)';
+  const accent = 'rgba(2, 69, 122, 0.75)';
   const gradId = `ph-grad-${uid}`;
 
   const wrap = (children) => (
     <svg
       className="components-card-placeholder-svg"
-      viewBox="0 0 120 80"
+      viewBox="0 0 120 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="120" y2="80" gradientUnits="userSpaceOnUse">
-          <stop stopColor="rgba(15, 23, 42, 0.92)" />
-          <stop offset="1" stopColor="rgba(30, 41, 59, 0.88)" />
+        <linearGradient id={gradId} x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#f4f7fa" />
+          <stop offset="1" stopColor="#e8eef4" />
         </linearGradient>
       </defs>
-      <rect width="120" height="80" rx="8" fill={`url(#${gradId})`} />
+      <rect width="120" height="120" rx="12" fill={`url(#${gradId})`} />
       {children}
     </svg>
   );
@@ -105,12 +105,20 @@ export default function ComponentMediaPlaceholder({ kind = 'generic' }) {
           <path d="M60 60v8M52 68h16" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" />
         </>
       );
+    case 'mouse':
+      return wrap(
+        <>
+          <rect x="34" y="52" width="52" height="32" rx="16" stroke={accent} strokeWidth="1.5" fill={fill} />
+          <path d="M60 52v16M60 48v4" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M44 60h32" stroke={stroke} strokeWidth="1" strokeLinecap="round" />
+        </>
+      );
+    case 'keyboard':
     case 'peripheral':
       return wrap(
         <>
-          <rect x="28" y="36" width="64" height="22" rx="3" stroke={accent} strokeWidth="1.5" fill={fill} />
-          <path d="M36 44h48M40 50h8M52 50h8M64 50h8" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" />
-          <circle cx="60" cy="26" r="8" stroke={accent} strokeWidth="1.2" />
+          <rect x="22" y="48" width="76" height="28" rx="4" stroke={accent} strokeWidth="1.5" fill={fill} />
+          <path d="M30 56h8M42 56h8M54 56h8M66 56h8M78 56h8M30 64h8M42 64h8M54 64h8M66 64h8" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" />
         </>
       );
     default:

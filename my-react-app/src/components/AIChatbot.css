@@ -139,7 +139,8 @@
   bottom: 24px;
   right: 24px;
   width: 380px;
-  max-width: calc(100vw - 48px);
+  max-width: min(420px, calc(100dvw - 48px));
+  right: max(16px, env(safe-area-inset-right, 0px));
   height: 520px;
   max-height: calc(100dvh - 80px);
   background: var(--bg-primary);
@@ -408,6 +409,13 @@
   color: var(--text-primary);
   font-weight: 600;
   font-size: 0.85rem;
+}
+
+.user-avatar-icon-wrap {
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(var(--primary-rgb), 0.28);
+  box-shadow: 0 1px 4px rgba(var(--primary-rgb), 0.18);
 }
 
 .widget-message-content {

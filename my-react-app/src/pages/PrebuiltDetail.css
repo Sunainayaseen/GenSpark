@@ -251,6 +251,74 @@
   word-break: break-word;
 }
 
+/* Inventory status badges — one consistent pill shape for every state */
+.prebuilt-stock-badge {
+  display: inline-block;
+  margin-top: 0.3rem;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* In stock — soft green */
+.prebuilt-stock-badge--in {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+/* Out of stock — amber / warning */
+.prebuilt-stock-badge--out {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+/* Not in catalog — muted red, same pill shape for consistency */
+.prebuilt-stock-badge--missing {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* Included (peripheral / no cart line) — neutral */
+.prebuilt-stock-badge--included {
+  color: #475569;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+/* Subtle, non-intrusive "Find alternatives" link beside out-of-stock / missing badges */
+.prebuilt-find-alt {
+  display: inline-block;
+  margin-top: 0.3rem;
+  margin-left: 0.55rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--primary, #0b5cad);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.prebuilt-find-alt:hover {
+  color: var(--primary-dark, #073d73);
+}
+
+.prebuilt-find-alt:focus-visible {
+  outline: 2px solid var(--primary, #0b5cad);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .prebuilt-detail-cart-note {
   margin: 0;
   font-size: 0.8rem;

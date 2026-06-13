@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ecomGetCart, ecomRemoveItem, ecomSendForApproval, ecomResetRejected } from '../api/ecomApi';
+import { useConfirm } from '../components/ConfirmProvider';
 import './ecommerce.css';
 
 /**
@@ -9,6 +10,7 @@ import './ecommerce.css';
  */
 const CartPage = () => {
   const { isLoggedIn } = useAuth();
+  const { confirm } = useConfirm();
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -49,7 +51,12 @@ const CartPage = () => {
 
   const sendApproval = async () => {
     if (!cart) return;
-    if (!window.confirm('Send this cart to admin for approval?')) return;
+    const ok = await confirm({
+      title: 'Send for approval?',
+      message: 'Submit this cart to an admin for review and approval before checkout?',
+      confirmText: 'Send for approval',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const res = await ecomSendForApproval(cart.id);
@@ -63,7 +70,13 @@ const CartPage = () => {
 
   const resetCart = async () => {
     if (!cart) return;
-    if (!window.confirm('Clear this rejected cart and start over?')) return;
+    const ok = await confirm({
+      title: 'Start over?',
+      message: 'Clear this rejected cart and begin a new one?',
+      confirmText: 'Clear cart',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const res = await ecomResetRejected(cart.id);
@@ -114,7 +127,7 @@ const CartPage = () => {
               <span>
                 {it.name} × {it.quantity}
               </span>
-              <span>PKR {it.line_total?.toFixed(2) ?? (it.unit_price * it.quantity).toFixed(2)}</span>
+              <span>PKR {Number(it.line_total ?? (it.unit_price || 0) * (it.quantity || 0)).toFixed(2)}</span>
               {s === 'active' && (
                 <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => remove(it.id)}>
                   Remove

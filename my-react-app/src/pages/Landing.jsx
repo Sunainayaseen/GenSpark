@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { PREBUILT_SHOWCASE, prebuiltToConfiguratorBuild } from '../data/prebuiltShowcase';
 import { initScrollAnimations } from '../utils/scrollAnimations';
 import HeroSlideshow from '../components/HeroSlideshow';
+import { useConfirm } from '../components/ConfirmProvider';
 import './Landing.css';
 
 const Landing = () => {
   const navigate = useNavigate();
   const { updateRequirements, setSelectedBuild } = useApp();
+  const { notify } = useConfirm();
 
   const buildCardsRef = useRef([]);
   const featureCardsRef = useRef([]);
@@ -87,9 +89,7 @@ const Landing = () => {
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
-    // Handle form submission
-    console.log('Form submitted:', formData);
-    alert('Thank you for contacting us! We will get back to you soon.');
+    notify('Thank you for contacting us! We will get back to you soon.', { type: 'success' });
     setFormData({
       name: '',
       email: '',
@@ -122,7 +122,7 @@ const Landing = () => {
               <p className="popular-builds-subtitle">Handpicked configurations for gaming, work, and creativity—ready to customize.</p>
             </div>
             <Link to="/builds" className="view-all-builds-btn">
-              View predefined PCs
+              View Prebuilt PCs
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </Link>
           </div>
@@ -231,7 +231,7 @@ const Landing = () => {
                 <svg className="feature-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13 2v2"/><path d="M13 20v2"/></svg>
               </div>
               <h4>Real-time Updates</h4>
-              <p>Get WhatsApp notifications at every step of your build journey.</p>
+              <p>Track every step of your build journey with live order status and instant in-app notifications.</p>
             </div>
             <div className="feature-card" ref={(el) => featureCardsRef.current[3] = el}>
               <div className="feature-card-icon-wrap">
@@ -302,7 +302,7 @@ const Landing = () => {
                 <span className="star">★</span><span className="star">★</span><span className="star">★</span><span className="star">★</span><span className="star">★</span>
               </div>
               <blockquote className="review-quote">
-                Ordered an office PC for our startup. On-time delivery, clean assembly, and WhatsApp updates at every step. Highly recommend.
+                Ordered an office PC for our startup. On-time delivery, clean assembly, and live order updates at every step. Highly recommend.
               </blockquote>
               <div className="review-author">
                 <div className="review-avatar">R</div>
