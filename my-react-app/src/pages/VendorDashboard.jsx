@@ -4,7 +4,7 @@ import './VendorDashboard.css';
 
 const VendorDashboard = () => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [iframeSrc, setIframeSrc] = useState(''); // Login ke baad hi dashboard load – bina login access nahi
+  const [iframeSrc, setIframeSrc] = useState(''); // Load the dashboard only after login — no access without authentication
 
   useEffect(() => {
     const onVendorLoginSuccess = () => {

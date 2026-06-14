@@ -1,0 +1,17 @@
+# Render.com — alternative if Railway app was deleted
+# Dashboard: New → Blueprint → connect repo → set root to vendor dashboard
+services:
+  - type: web
+    name: genspark-api
+    runtime: python
+    rootDir: vendor dashboard
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 run:app
+    healthCheckPath: /api/health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: USE_SQLITE
+        value: "0"
+      - key: PYTHON_VERSION
+        value: "3.11.0"

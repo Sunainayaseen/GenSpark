@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useCart } from '../context/CartContext';
@@ -7,6 +7,7 @@ import {
   QUICK_REQUIREMENTS,
   prebuiltToConfiguratorBuild,
 } from '../data/prebuiltShowcase';
+import { resolveBuildParts, addResolvedBuildToCart } from '../utils/buildResolver';
 import './PrebuiltDetail.css';
 
 const PrebuiltDetail = () => {
@@ -17,6 +18,32 @@ const PrebuiltDetail = () => {
   const [adding, setAdding] = useState(false);
 
   const item = useMemo(() => getPrebuiltById(id), [id]);
+
+  // ERP-backed resolution: map static parts → real catalog components.
+  const [resolving, setResolving] = useState(false);
+  const [resolution, setResolution] = useState(null); // { slots, summary }
+  const [cartMsg, setCartMsg] = useState(null); // { type, text }
+
+  useEffect(() => {
+    if (!item?.parts) return undefined;
+    let alive = true;
+    setResolving(true);
+    setResolution(null);
+    setCartMsg(null);
+    resolveBuildParts(item.parts)
+      .then((result) => {
+        if (alive) setResolution(result);
+      })
+      .catch(() => {
+        if (alive) setResolution(null);
+      })
+      .finally(() => {
+        if (alive) setResolving(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [item]);
 
   if (!item) {
     return (
@@ -34,11 +61,50 @@ const PrebuiltDetail = () => {
 
   const buildForContext = () => prebuiltToConfiguratorBuild(item);
 
+  // Match a static part row to its ERP resolution (by slot + requested value).
+  const resolutionForPart = (part) => {
+    if (!resolution?.slots) return null;
+    const value = String(part?.value || '').trim().toLowerCase();
+    return (
+      resolution.slots.find(
+        (s) => s.requested.toLowerCase() === value && s.label === part.name
+      ) ||
+      resolution.slots.find((s) => s.requested.toLowerCase() === value) ||
+      null
+    );
+  };
+
+  const summary = resolution?.summary || null;
+  // Each status maps to a consistent pill class in PrebuiltDetail.css
+  // (in = soft green, out = amber/warning, missing = red, included = neutral).
+  const STATUS_BADGE = {
+    resolved: { text: 'In stock', cls: 'in' },
+    out_of_stock: { text: 'Out of stock', cls: 'out' },
+    not_found: { text: 'Not in catalog', cls: 'missing' },
+    skipped: { text: 'Included', cls: 'included' },
+  };
+
   const handleAddToCart = async () => {
+    if (!resolution?.slots?.length) {
+      setCartMsg({ type: 'error', text: 'Parts are still being matched to inventory. Please wait a moment.' });
+      return;
+    }
     setAdding(true);
+    setCartMsg(null);
     try {
-      const ok = await addToCart({ id: item.id, item_type: 'pc_build' });
-      if (ok) setIsCartOpen(true);
+      const { added, failed } = await addResolvedBuildToCart(resolution.slots, addToCart);
+      if (added > 0) {
+        setIsCartOpen(true);
+        const note = failed.length
+          ? ` (${failed.length} part${failed.length > 1 ? 's' : ''} skipped: ${failed.join(', ')})`
+          : '';
+        setCartMsg({ type: 'success', text: `${added} component${added > 1 ? 's' : ''} added to cart.${note}` });
+      } else {
+        setCartMsg({
+          type: 'error',
+          text: 'None of these parts are available in inventory yet. Use Customize to pick alternatives.',
+        });
+      }
     } finally {
       setAdding(false);
     }
@@ -57,6 +123,23 @@ const PrebuiltDetail = () => {
   const handleAskAi = () => {
     updateRequirements(QUICK_REQUIREMENTS[item.quickKey] || QUICK_REQUIREMENTS.gaming);
     navigate('/chatbot');
+  };
+
+  // Generic catalog term per slot — opens the configurator search so the user can
+  // pick an in-stock alternative for a part that isn't in the catalog / is sold out.
+  const FIND_ALT_QUERY = {
+    CPU: 'processor',
+    GPU: 'graphics card',
+    Motherboard: 'motherboard',
+    RAM: 'ram',
+    Storage: 'ssd',
+    PSU: 'power supply',
+    Case: 'case',
+  };
+
+  const handleFindAlternatives = (part) => {
+    const term = FIND_ALT_QUERY[part?.name] || part?.value || part?.name || '';
+    navigate(`/configurator?q=${encodeURIComponent(term)}`);
   };
 
   return (
@@ -93,7 +176,18 @@ const PrebuiltDetail = () => {
             <dl className="prebuilt-detail-stats">
               <div className="prebuilt-detail-stat">
                 <dt>Price</dt>
-                <dd>PKR {item.price.toLocaleString()}</dd>
+                <dd>
+                  {summary && summary.total > 0 ? (
+                    <>
+                      PKR {summary.total.toLocaleString()}
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', fontWeight: 400 }}>
+                        live inventory · est. PKR {item.price.toLocaleString()}
+                      </span>
+                    </>
+                  ) : (
+                    <>PKR {item.price.toLocaleString()}</>
+                  )}
+                </dd>
               </div>
               <div className="prebuilt-detail-stat">
                 <dt>Performance</dt>
@@ -122,28 +216,86 @@ const PrebuiltDetail = () => {
                 Full specifications
               </h2>
               <ul className="prebuilt-detail-specs-list">
-                {item.parts.map((part, idx) => (
-                  <li key={idx} className="prebuilt-detail-spec-row">
-                    <span className="prebuilt-detail-spec-label">{part.name}</span>
-                    <span className="prebuilt-detail-spec-value">{part.value}</span>
-                  </li>
-                ))}
+                {item.parts.map((part, idx) => {
+                  const res = resolutionForPart(part);
+                  const badge = res ? STATUS_BADGE[res.status] : null;
+                  const matchedName = res?.component?.name;
+                  const showMatched = matchedName && matchedName.toLowerCase() !== part.value.toLowerCase();
+                  return (
+                    <li key={idx} className="prebuilt-detail-spec-row">
+                      <span className="prebuilt-detail-spec-label">{part.name}</span>
+                      <span className="prebuilt-detail-spec-value">
+                        {part.value}
+                        {showMatched && (
+                          <span style={{ display: 'block', fontSize: '0.74rem', color: '#64748b' }}>
+                            ↳ matched: {matchedName}
+                          </span>
+                        )}
+                        {resolving && !res && (
+                          <span style={{ display: 'block', fontSize: '0.74rem', color: '#94a3b8' }}>
+                            matching inventory…
+                          </span>
+                        )}
+                        {badge && res.status !== 'skipped' && (
+                          <span className={`prebuilt-stock-badge prebuilt-stock-badge--${badge.cls}`}>
+                            {badge.text}
+                            {res.component?.price > 0 && ` · PKR ${res.component.price.toLocaleString()}`}
+                          </span>
+                        )}
+                        {(res?.status === 'not_found' || res?.status === 'out_of_stock') && (
+                          <button
+                            type="button"
+                            className="prebuilt-find-alt"
+                            onClick={() => handleFindAlternatives(part)}
+                            aria-label={`Find alternatives for ${part.name}`}
+                          >
+                            Find alternatives →
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
 
             <p className="prebuilt-detail-cart-note">
-              Add to cart links this SKU to inventory-backed parts when the same build exists in our system.
-              If checkout is unavailable, use <strong>Customize</strong> to finalize components.
+              Add to cart resolves each part to live vendor inventory and adds the in-stock components individually.
+              Parts not yet in the catalog are skipped — use <strong>Customize</strong> to pick alternatives.
+              {summary && summary.fullyResolved && ' All parts are available.'}
+              {summary && !summary.fullyResolved && summary.missingLabels?.length > 0 &&
+                ` Not in catalog: ${summary.missingLabels.join(', ')}.`}
             </p>
+
+            {cartMsg && (
+              <p
+                role="status"
+                style={{
+                  padding: '0.6rem 0.9rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  color: cartMsg.type === 'error' ? '#b91c1c' : '#065f46',
+                  background: cartMsg.type === 'error' ? '#fef2f2' : '#ecfdf5',
+                }}
+              >
+                {cartMsg.text}
+              </p>
+            )}
 
             <div className="prebuilt-detail-actions">
               <button
                 type="button"
                 className="btn btn-primary prebuilt-detail-btn-primary"
                 onClick={handleAddToCart}
-                disabled={adding}
+                disabled={adding || resolving || !summary || summary.addableCount === 0}
               >
-                {adding ? 'Adding…' : 'Add to cart'}
+                {adding
+                  ? 'Adding…'
+                  : resolving
+                    ? 'Checking stock…'
+                    : summary && summary.addableCount === 0
+                      ? 'Unavailable'
+                      : 'Add to cart'}
               </button>
               <button type="button" className="btn btn-secondary" onClick={handleConfigure}>
                 Customize build

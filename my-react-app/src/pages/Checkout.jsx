@@ -1,10 +1,18 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState, useCallback, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useBlockingOrder } from '../hooks/useBlockingOrder';
 import { dashboardPost } from '../api/dashboardApi';
+import { listAddresses } from '../api/addressesApi';
+import CheckoutForm from '../components/CheckoutForm';
+import { useConfirm } from '../components/ConfirmProvider';
 import './Checkout.css';
+
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 const initialAddress = () => ({
   fullName: '',
@@ -30,16 +38,83 @@ const buildShippingAddress = (a) => {
 const Checkout = () => {
   const navigate = useNavigate();
   const { user, isLoggedIn } = useAuth();
+  const { notify } = useConfirm();
   const { blockingOrder, checkingBlocking } = useBlockingOrder();
   const { cartItems, vendorGroups, cartTotal, clearCart, cartLoading } = useCart();
 
   const [address, setAddress] = useState(initialAddress);
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddrId, setSelectedAddrId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cod');
+
+  // Load the user's saved addresses; auto-fill the default one for convenience.
+  useEffect(() => {
+    if (!isLoggedIn) { setSavedAddresses([]); return; }
+    let alive = true;
+    listAddresses()
+      .then((rows) => {
+        if (!alive) return;
+        setSavedAddresses(rows);
+        const def = rows.find((r) => r.is_default) || rows[0];
+        if (def) { setSelectedAddrId(String(def.id)); applySavedAddress(def); }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applySavedAddress = (a) => {
+    if (!a) return;
+    setAddress((prev) => ({
+      ...prev,
+      fullName: a.full_name || prev.fullName,
+      phone: a.phone || prev.phone,
+      addressLine1: a.line1 || '',
+      addressLine2: '',
+      city: a.city || '',
+      postalCode: a.postal_code || '',
+    }));
+    setFormErrors({});
+  };
+
+  const onPickSaved = (e) => {
+    const id = e.target.value;
+    setSelectedAddrId(id);
+    if (id === '') { setAddress(initialAddress()); return; }   // "New address"
+    const a = savedAddresses.find((x) => String(x.id) === id);
+    applySavedAddress(a);
+  };
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
   const shipping = useMemo(() => (cartItems.length > 0 ? 2000 : 0), [cartItems.length]);
   const grandTotal = cartTotal + shipping;
+  const itemCount = useMemo(
+    () => cartItems.reduce((sum, item) => sum + (item.quantity || 0), 0),
+    [cartItems],
+  );
+
+  const stripeCartItems = useMemo(
+    () =>
+      cartItems.map((item) => ({
+        product_id: item.product_id || item.component_id || item.id,
+        quantity: item.quantity,
+        price: item.price,
+        vendor_id: item.vendor_id ?? null,
+      })),
+    [cartItems],
+  );
+
+  const handleStripeSuccess = async (dbRes) => {
+    await clearCart().catch(() => {});
+    navigate('/order-success', {
+      replace: true,
+      state: {
+        orderId: dbRes.order_id,
+        orderNumber: dbRes.order_number,
+        totalAmount: grandTotal,
+      },
+    });
+  };
 
   const handleAddressChange = (e) => {
     const { name, value } = e.target;
@@ -62,6 +137,8 @@ const Checkout = () => {
     setFormErrors(err);
     return Object.keys(err).length === 0;
   };
+
+  const validateForStripe = useCallback(() => validate(), [address]);
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
@@ -86,8 +163,7 @@ const Checkout = () => {
       });
       clearCart().catch(() => {});
     } catch (err) {
-      // eslint-disable-next-line no-alert
-      alert(err?.data?.error || err?.message || 'Order placement failed');
+      notify(err?.data?.error || err?.message || 'Order placement failed', { type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -161,10 +237,31 @@ const Checkout = () => {
   return (
     <div className="checkout-page">
       <div className="container">
-        <div className="checkout-header">
-          <h1>Checkout</h1>
-          <p>Enter your delivery details and review your order. Admin approval is required before vendors fulfill.</p>
-        </div>
+        <header className="checkout-header">
+          <div className="checkout-header-top">
+            <div>
+              <h1>Checkout</h1>
+              <p>Secure delivery details and payment. Your order is reviewed before vendors ship.</p>
+            </div>
+            <span className="checkout-item-badge" aria-label={`${itemCount} items in cart`}>
+              {itemCount} {itemCount === 1 ? 'item' : 'items'}
+            </span>
+          </div>
+          <ol className="checkout-steps" aria-label="Checkout progress">
+            <li className="is-active">
+              <span className="step-num">1</span>
+              Shipping
+            </li>
+            <li className={paymentMethod === 'online' ? 'is-active' : ''}>
+              <span className="step-num">2</span>
+              Payment
+            </li>
+            <li>
+              <span className="step-num">3</span>
+              Review
+            </li>
+          </ol>
+        </header>
 
         {blockingOrder ? (
           <div className="checkout-pending-alert" role="alert">
@@ -193,6 +290,23 @@ const Checkout = () => {
             <section className="checkout-card" aria-labelledby="ship-heading">
               <h2 id="ship-heading">Shipping address</h2>
               <p className="checkout-section-hint">We will use this for delivery and order updates.</p>
+
+              {savedAddresses.length > 0 && (
+                <div className="checkout-saved-addr">
+                  <label htmlFor="savedAddr">Use a saved address</label>
+                  <div className="checkout-saved-row">
+                    <select id="savedAddr" value={selectedAddrId} onChange={onPickSaved} className="checkout-saved-select">
+                      <option value="">+ Enter a new address</option>
+                      {savedAddresses.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {(a.label ? `${a.label} — ` : '') + (a.line1 || '') + (a.city ? `, ${a.city}` : '')}{a.is_default ? ' (default)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <Link to="/my-orders" className="checkout-saved-manage">Manage</Link>
+                  </div>
+                </div>
+              )}
 
               <div className="form-row">
                 <div className="form-group">
@@ -330,21 +444,45 @@ const Checkout = () => {
               </div>
 
               {paymentMethod === 'online' ? (
-                <div className="payment-notice" role="status">
-                  <strong>Next step after you order</strong>
-                  <p>
-                    We will email or message you a secure payment link or instructions. Your order is recorded as
-                    <em> online payment</em> so our team can match it quickly. You can also switch to cash on
-                    delivery above if you prefer to pay in person.
-                  </p>
-                </div>
+                stripePromise ? (
+                  <Elements stripe={stripePromise}>
+                    <CheckoutForm
+                      amount={grandTotal}
+                      userId={user.id}
+                      cartItems={stripeCartItems}
+                      shippingAddress={buildShippingAddress(address)}
+                      shippingFee={shipping}
+                      onValidate={validateForStripe}
+                      onSuccess={handleStripeSuccess}
+                      currencyLabel="PKR"
+                    />
+                  </Elements>
+                ) : (
+                  <div className="payment-notice" role="status">
+                    <strong>Stripe not configured</strong>
+                    <p>
+                      Add <code>VITE_STRIPE_PUBLISHABLE_KEY</code> to <code>my-react-app/.env</code> and{' '}
+                      <code>STRIPE_SECRET_KEY</code> to the Flask backend <code>.env</code>, then restart both
+                      servers.
+                    </p>
+                  </div>
+                )
               ) : null}
             </section>
           </div>
             </fieldset>
 
           <aside className="checkout-summary" aria-label="Order summary">
-            <h2>Order summary</h2>
+            <div className="checkout-summary-header">
+              <h2>Order summary</h2>
+              <span className="checkout-summary-count">{itemCount} items</span>
+            </div>
+
+            <ul className="checkout-trust" aria-label="Checkout guarantees">
+              <li>Secure checkout</li>
+              <li>PKR pricing</li>
+              <li>Admin verified</li>
+            </ul>
 
             <ul className="checkout-summary-items">
               {vendorGroups.length > 0
@@ -379,28 +517,36 @@ const Checkout = () => {
 
             <div className="summary-divider" />
 
-            <div className="summary-row">
-              <span>Subtotal</span>
-              <span>PKR {cartTotal.toLocaleString()}</span>
-            </div>
-            <div className="summary-row">
-              <span>Shipping (estimate)</span>
-              <span>PKR {shipping.toLocaleString()}</span>
-            </div>
-            <div className="summary-row total">
-              <span>Total</span>
-              <span>PKR {grandTotal.toLocaleString()}</span>
+            <div className="summary-totals">
+              <div className="summary-row">
+                <span>Subtotal</span>
+                <span>PKR {cartTotal.toLocaleString()}</span>
+              </div>
+              <div className="summary-row">
+                <span>Shipping (estimate)</span>
+                <span>PKR {shipping.toLocaleString()}</span>
+              </div>
+              <div className="summary-row total">
+                <span>Total</span>
+                <span>PKR {grandTotal.toLocaleString()}</span>
+              </div>
             </div>
 
-            <p className="summary-note">Prices in PKR. Final shipping may be confirmed after admin approval.</p>
+            <p className="summary-note">All amounts in PKR. Shipping may be adjusted after admin approval.</p>
 
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg"
-              disabled={submitting || Boolean(blockingOrder)}
-            >
-              {submitting ? 'Placing order…' : 'Place order'}
-            </button>
+            {paymentMethod !== 'online' ? (
+              <button
+                type="submit"
+                className="btn btn-primary btn-lg"
+                disabled={submitting || Boolean(blockingOrder)}
+              >
+                {submitting ? 'Placing order…' : 'Place order'}
+              </button>
+            ) : (
+              <p className="checkout-stripe-hint">
+                Complete card payment in the payment section. Stock updates after payment is confirmed.
+              </p>
+            )}
             <button type="button" className="btn btn-secondary" onClick={() => navigate('/cart')}>
               Back to cart
             </button>

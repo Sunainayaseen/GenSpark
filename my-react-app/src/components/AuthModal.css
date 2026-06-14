@@ -51,8 +51,9 @@
 
 .auth-modal:has(.auth-modal-split) {
   border-radius: 0;
-  height: 620px;
-  max-height: 90vh;
+  /* Content-sized so the whole form is visible at once (no inner scrollbar) */
+  height: auto;
+  max-height: 94vh;
 }
 
 .auth-modal:not(:has(.auth-modal-split)) {
@@ -71,8 +72,9 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 1.25rem 1.75rem 1.5rem;
-  /* Allow scrolling so the submit button doesn't get clipped on shorter viewports */
+  justify-content: center;
+  padding: 1.5rem 1.75rem;
+  /* Content fits in one view; auto only kicks in on very short viewports */
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -81,7 +83,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.65rem;
   flex-shrink: 0;
 }
 
@@ -315,8 +317,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  flex: 1;
+  gap: 0.7rem;
   min-height: 0;
 }
 
@@ -362,7 +363,7 @@
 
 .form-group input {
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 1rem;
   padding-right: 3rem;
   border: 1px solid #d4d7dc;

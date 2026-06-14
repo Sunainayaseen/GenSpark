@@ -72,7 +72,8 @@
   bottom: 76px;
   right: 24px;
   width: 380px;
-  max-width: calc(100vw - 48px);
+  max-width: min(380px, calc(100dvw - 48px));
+  right: max(16px, env(safe-area-inset-right, 0px));
   height: 600px;
   max-height: calc(100vh - 140px);
   background: var(--bg-primary);
@@ -413,8 +414,10 @@
 
 @media (max-width: 768px) {
   .chatbot-window {
-    width: calc(100vw - 32px);
+    left: 16px;
     right: 16px;
+    width: auto;
+    max-width: none;
     bottom: 80px;
     height: calc(100vh - 120px);
     max-height: 600px;

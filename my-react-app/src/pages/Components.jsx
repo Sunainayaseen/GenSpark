@@ -4,15 +4,16 @@ import { getAuthHeaders } from '../utils/authStorage';
 import { dashboardGet } from '../api/dashboardApi';
 import { useCart } from '../context/CartContext';
 import {
-  resolveComponentImageUrl,
   getComponentPlaceholderKind,
-  getCategoryStockImagePath,
-  getCategoryStockPhotoUrl,
+  getComponentImageCandidates,
+  getDisplayCategory,
+  isLocalComponentPhotoUrl,
 } from '../utils/componentImage';
+import { COMPONENT_HERO_PHOTOS } from '../utils/componentLocalPhotos';
 import ComponentMediaPlaceholder from './ComponentMediaPlaceholder';
 import './Components.css';
 
-const LIST_LIMIT = 500;
+const LIST_LIMIT = 120;
 
 /** Lowercased blob of searchable fields for client-side filtering. */
 function componentSearchBlob(c) {
@@ -45,56 +46,80 @@ function ComponentCard({
     () => getComponentPlaceholderKind(c.category, c.name),
     [c.category, c.name]
   );
-  const stockPath = useMemo(() => getCategoryStockImagePath(kind), [kind]);
-  const stockPhotoUrl = useMemo(() => getCategoryStockPhotoUrl(kind), [kind]);
-  const dbUrl = resolveComponentImageUrl(c.image_url, apiBase);
-
-  const candidates = useMemo(() => {
-    const list = [];
-    if (dbUrl) list.push(dbUrl);
-    list.push(stockPhotoUrl);
-    list.push(stockPath);
-    return [...new Set(list)];
-  }, [dbUrl, stockPhotoUrl, stockPath]);
+  const candidates = useMemo(
+    () => getComponentImageCandidates(c, apiBase),
+    [c.id, c.image_url, c.category, c.name, apiBase]
+  );
 
   const [imgFailIdx, setImgFailIdx] = useState(0);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   useEffect(() => {
     setImgFailIdx(0);
+    setImgLoaded(false);
   }, [c.id, candidates.join('|')]);
 
   const activeSrc = candidates[imgFailIdx] ?? null;
   const showRaster = imgFailIdx < candidates.length && activeSrc;
+  const isSvg = activeSrc?.includes('.svg');
+  const isProductPhoto = isLocalComponentPhotoUrl(activeSrc);
 
   return (
     <li className="components-card">
       <div className="components-card-media">
-        {showRaster ? (
-          <img
-            src={activeSrc}
-            alt={c.name || 'Component'}
-            loading="lazy"
-            decoding="async"
-            onError={() => setImgFailIdx((i) => i + 1)}
-          />
-        ) : (
-          <div className="components-card-placeholder-wrap">
-            <ComponentMediaPlaceholder kind={kind} />
-            <span className="components-card-placeholder-label">{c.category || 'Part'}</span>
-          </div>
-        )}
+        <span className="components-card-category">
+          {getDisplayCategory(c.category, c.name)}
+        </span>
+        <div
+          className={`components-card-media-stage ${imgLoaded ? 'is-loaded' : ''} ${isSvg ? 'is-svg' : ''} ${isProductPhoto ? 'is-product-photo' : ''}`}
+        >
+          {showRaster ? (
+            <>
+              {!isSvg ? (
+                <img
+                  className="components-card-img-bg"
+                  src={activeSrc}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : null}
+              <img
+                className={`components-card-img ${isSvg ? 'components-card-img--svg' : ''}`}
+                src={activeSrc}
+                alt={c.name || 'Component'}
+                loading="lazy"
+                decoding="async"
+                onLoad={() => setImgLoaded(true)}
+                onError={() => {
+                  setImgLoaded(false);
+                  setImgFailIdx((i) => i + 1);
+                }}
+              />
+              {!imgLoaded ? <div className="components-card-img-shimmer" aria-hidden="true" /> : null}
+            </>
+          ) : (
+            <div className="components-card-placeholder-wrap">
+              <ComponentMediaPlaceholder kind={kind} />
+            </div>
+          )}
+        </div>
       </div>
       <div className="components-card-body">
         <h2 className="components-card-title">{c.name}</h2>
-        <p className="components-card-meta">
-          {[c.brand, c.category].filter(Boolean).join(' · ') || '—'}
-        </p>
+        {c.brand ? <p className="components-card-meta">{c.brand}</p> : null}
         {c.description && <p className="components-card-desc">{c.description}</p>}
         <div className="components-card-price-row">
-          <span className="components-card-price">
-            PKR {Number(c.price || 0).toLocaleString()}
+          <div className="components-card-price-block">
+            <span className="components-card-price-label">Price</span>
+            <span className="components-card-price">
+              PKR {Number(c.price || 0).toLocaleString()}
+            </span>
+          </div>
+          <span className="components-card-stock">
+            Catalog stock: <strong>{c.stock ?? 0}</strong>
           </span>
-          <span className="components-card-stock">Stock (catalog): {c.stock ?? 0}</span>
         </div>
         <div
           className={`components-vendor-pill ${
@@ -117,7 +142,23 @@ function ComponentCard({
                 : 'No vendor has this part in stock yet'
             }
           >
-            Add to cart
+            <svg
+              className="components-add-btn-icon"
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+            {hasVendor ? 'Add to cart' : 'Unavailable'}
           </button>
           <button
             type="button"
@@ -187,7 +228,7 @@ export default function Components() {
       const base = getFlaskBase() || getFlaskBaseFallback();
       if (!base) {
         setError(
-          'Backend server is not reachable. Ensure the GenSpark API is online at https://genspark-production.up.railway.app'
+          'Backend server is not reachable. Run START-GENSPARK-DEV.bat, then open http://localhost:5173/components'
         );
       } else {
         setError(e.message || 'Could not load components.');
@@ -265,15 +306,47 @@ export default function Components() {
 
   return (
     <div className="components-page">
-      <div className="container">
-        <header className="components-header">
-          <h1>Components</h1>
-          <p>
-            Parts added by your admin appear here. Add to cart is fulfilled by an approved vendor who
-            has stock; if no vendor carries a part yet, add to cart stays disabled.
-          </p>
+      <div className="container components-page-inner">
+        <header className="components-hero">
+          <div className="components-hero-grid">
+            <div className="components-hero-copy">
+              <p className="components-hero-eyebrow">Parts catalog</p>
+              <h1>Components</h1>
+              <p className="components-hero-lead">
+                Browse Dell, HP, and Lenovo parts with real product photos. Add to cart when an
+                approved vendor has stock.
+              </p>
+              <ul className="components-hero-stats" aria-label="Catalog highlights">
+                <li>
+                  <strong>{loading ? '—' : items.length}</strong>
+                  <span>Listed parts</span>
+                </li>
+                <li>
+                  <strong>{categories.length || '—'}</strong>
+                  <span>Categories</span>
+                </li>
+                <li>
+                  <strong>PKR</strong>
+                  <span>Local pricing</span>
+                </li>
+              </ul>
+            </div>
+            <div className="components-hero-visual" aria-hidden="true">
+              <div className="components-hero-collage">
+                {COMPONENT_HERO_PHOTOS.map((src, i) => (
+                  <div
+                    key={src}
+                    className={`components-hero-thumb components-hero-thumb--${i + 1}`}
+                  >
+                    <img src={src} alt="" loading="eager" decoding="async" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </header>
 
+        <div className="components-toolbar-panel">
         <div className="components-toolbar">
           <div className="components-search" role="search" aria-label="Catalog search">
             <label className="components-search-field" htmlFor="components-catalog-search">
@@ -347,6 +420,33 @@ export default function Components() {
           </span>
         </div>
 
+        {!loading && categories.length > 0 && (
+          <div className="components-chips" role="group" aria-label="Filter by category">
+            <button
+              type="button"
+              className={`components-chip ${categoryFilter === '' ? 'is-active' : ''}`}
+              aria-pressed={categoryFilter === ''}
+              onClick={() => setCategoryFilter('')}
+            >
+              All categories
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                className={`components-chip ${categoryFilter === cat ? 'is-active' : ''}`}
+                aria-pressed={categoryFilter === cat}
+                onClick={() =>
+                  setCategoryFilter((cur) => (cur === cat ? '' : cat))
+                }
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
+        </div>
+
         {error && (
           <div className="components-banner components-banner--error" role="alert">
             {error}
@@ -354,10 +454,18 @@ export default function Components() {
         )}
 
         {loading && (
-          <div className="components-loading" role="status" aria-live="polite">
-            <span className="loading-spinner" aria-hidden="true" />
-            Loading inventory…
-          </div>
+          <ul className="components-grid components-grid--skeleton" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, i) => (
+              <li key={i} className="components-card components-card--skeleton">
+                <div className="components-skeleton-media" />
+                <div className="components-skeleton-body">
+                  <div className="components-skeleton-line components-skeleton-line--lg" />
+                  <div className="components-skeleton-line" />
+                  <div className="components-skeleton-line components-skeleton-line--short" />
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
 
         {!loading && !error && filtered.length === 0 && (
@@ -388,6 +496,18 @@ export default function Components() {
           </div>
         )}
 
+        {!loading && !error && filtered.length > 0 && (
+          <div className="components-grid-header">
+            <h2 className="components-grid-title">Catalog</h2>
+            <p className="components-grid-sub">
+              {hasActiveFilters
+                ? `${filtered.length} matching parts`
+                : `${filtered.length} parts available`}
+            </p>
+          </div>
+        )}
+
+        {!loading && (
         <ul className="components-grid">
           {filtered.map((c) => {
             const hasVendor =
@@ -413,6 +533,7 @@ export default function Components() {
             );
           })}
         </ul>
+        )}
       </div>
     </div>
   );

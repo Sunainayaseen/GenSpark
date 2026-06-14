@@ -1,7 +1,11 @@
+import { LIVE_API_URL, LIVE_FRONTEND_URL } from '../config/deployUrls';
+
 const FLASK_BASE_KEY = 'genspark_flask_base';
 
-/** Live production API (Railway) — default for all production builds. */
-export const RAILWAY_API_BASE = 'https://genspark-production.up.railway.app';
+/** Live production API (Railway) — see src/config/deployUrls.js */
+export const RAILWAY_API_BASE = LIVE_API_URL;
+
+export { LIVE_FRONTEND_URL };
 
 const LOCAL_API_PATTERN = /^https?:\/\/(?:127\.0\.0\.1|localhost):5000/i;
 const VERCEL_HOST_RE = /vercel\.app/i;
@@ -12,23 +16,17 @@ const VERCEL_HOST_RE = /vercel\.app/i;
  */
 const LOCAL_DEV_API = 'http://127.0.0.1:5000';
 
-function isLocalDevFrontend() {
-  if (import.meta.env.PROD || typeof window === 'undefined') return false;
-  const host = window.location.hostname || '';
-  return /^localhost$|^127\.0\.0\.1$/i.test(host);
-}
-
 export function getApiBase() {
-  const railway = RAILWAY_API_BASE.replace(/\/$/, '');
+  const railway = LIVE_API_URL.replace(/\/$/, '');
   const fromEnv = import.meta.env?.VITE_API_BASE?.replace(/\/$/, '');
 
-  // Vite on localhost: use local Flask (YOLO weights in vendor dashboard/models/best.pt)
-  if (isLocalDevFrontend()) {
+  // Vite dev (localhost, 127.0.0.1, or LAN IP like 192.168.x.x:5173):
+  // same-origin + vite.config proxy /api → http://127.0.0.1:5000
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
     if (fromEnv && LOCAL_API_PATTERN.test(fromEnv)) {
       return fromEnv;
     }
-    // Ignore .env pointing at Railway during local dev — detection needs your machine
-    return LOCAL_DEV_API;
+    return window.location.origin.replace(/\/$/, '');
   }
 
   if (import.meta.env.PROD && typeof window !== 'undefined') {
@@ -63,10 +61,27 @@ const FRONTEND_HOST_RE =
  * Registration verify links must hit Flask on Railway, not the Vercel SPA.
  * Preserves the full ?token=... query string.
  */
+const VERIFY_EMAIL_PATH_RE = /\/api\/verify-email/i;
+const LOCAL_VERIFY_ORIGIN_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):5000$/i;
+
 export function normalizeVerificationUrl(rawUrl) {
   if (rawUrl == null) return rawUrl;
   const url = String(rawUrl).trim();
   if (!url) return url;
+
+  // Dev: backend already returns correct http://127.0.0.1:5000/api/verify-email?token=...
+  try {
+    const parsed = new URL(url);
+    if (
+      import.meta.env.DEV &&
+      LOCAL_VERIFY_ORIGIN_RE.test(parsed.origin) &&
+      VERIFY_EMAIL_PATH_RE.test(parsed.pathname)
+    ) {
+      return parsed.href;
+    }
+  } catch (_) {
+    /* fall through */
+  }
 
   const apiBase = getApiBase().replace(/\/$/, '');
 

@@ -103,11 +103,14 @@ export const CartProvider = ({ children }) => {
 
   const cartCount = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems]);
 
-  const addToCart = async (product, quantity = 1) => {
+  // opts.silent suppresses per-item toasts — used for bulk adds (e.g. a whole
+  // prebuilt build) where the caller shows a single summary instead.
+  const addToCart = async (product, quantity = 1, opts = {}) => {
+    const { silent = false } = opts;
     const itemType = product?.item_type || product?.type || 'component';
     const itemId = product?.id;
     if (!itemId) {
-      pushToast('error', 'Invalid product');
+      if (!silent) pushToast('error', 'Invalid product');
       return false;
     }
     try {
@@ -129,14 +132,14 @@ export const CartProvider = ({ children }) => {
       } else if (Array.isArray(res?.assigned_vendors) && res.assigned_vendors.length > 1) {
         msg = `Added to cart — ${res.assigned_vendors.length} items assigned to vendors`;
       }
-      pushToast('success', msg);
+      if (!silent) pushToast('success', msg);
       if (getStoredToken()) {
         refreshCart({ keepOnError: true }).catch(() => {});
       }
       return true;
     } catch (err) {
       const msg = err?.data?.error || err?.data?.message || err.message || 'Add to cart failed';
-      pushToast('error', msg);
+      if (!silent) pushToast('error', msg);
       return false;
     }
   };
@@ -185,6 +188,10 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  const applyCartFromServer = useCallback((cartPayload) => {
+    return applyCartPayload(cartPayload);
+  }, []);
+
   return (
     <CartContext.Provider
       value={{
@@ -194,12 +201,15 @@ export const CartProvider = ({ children }) => {
         removeFromCart,
         updateQuantity,
         clearCart,
+        refreshCart,
+        applyCartFromServer,
         cartTotal,
         cartCount,
         isCartOpen,
         setIsCartOpen,
         cartLoading,
         toast,
+        pushToast,
       }}
     >
       {children}

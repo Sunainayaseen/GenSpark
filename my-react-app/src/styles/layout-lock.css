@@ -1,0 +1,59 @@
+/**
+ * Site-wide horizontal overflow lock — prevents left/right page drift and swipe scroll.
+ * Use 100% / inset instead of 100vw in components (scrollbar-safe).
+ */
+
+html {
+  overflow-x: clip;
+  max-width: 100%;
+  overscroll-behavior-x: none;
+}
+
+body {
+  overflow-x: clip;
+  max-width: 100%;
+  width: 100%;
+  overscroll-behavior-x: none;
+  touch-action: pan-y pinch-zoom;
+}
+
+#root {
+  overflow-x: clip;
+  max-width: 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.app,
+.main-content {
+  overflow-x: clip;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Page shells — contain decorative pseudo-elements (shine, slides) */
+.landing,
+.checkout-page,
+.chatbot-recommendation-page,
+.chatbot-page,
+.about-page,
+.contact-page,
+.components-page,
+.cart-page,
+.order-status-page {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+/* Mobile menu / modal open — lock vertical + horizontal rubber-band */
+html.scroll-locked,
+html.scroll-locked body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+html.scroll-locked body {
+  position: relative;
+  width: 100%;
+}

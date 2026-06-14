@@ -1,0 +1,106 @@
+{# Styled confirmation modal (AdminLTE / Bootstrap 4) — replaces window.confirm() #}
+
+{% macro confirm_modal(modal_id, title, message, form_id, confirm_label='Confirm', confirm_class='btn-success', icon_class='text-warning', copy_from_id='', copy_to_id='') %}
+<div class="modal fade genspark-confirm-modal" id="{{ modal_id }}" tabindex="-1" role="dialog" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title font-weight-bold" id="{{ modal_id }}Label">{{ title }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body text-center px-4 pt-2 pb-3">
+        <div class="genspark-confirm-icon mb-3 {{ icon_class }}" aria-hidden="true">
+          <i class="fas fa-exclamation-triangle fa-3x"></i>
+        </div>
+        <p class="mb-0 text-secondary">{{ message }}</p>
+      </div>
+      <div class="modal-footer border-0 justify-content-center pt-0 pb-4">
+        <button type="button" class="btn btn-secondary px-4" data-dismiss="modal">Cancel</button>
+        <button type="submit" form="{{ form_id }}" class="btn {{ confirm_class }} px-4 genspark-confirm-submit" data-form-id="{{ form_id }}"
+          {% if copy_from_id and copy_to_id %}data-copy-from="{{ copy_from_id }}" data-copy-to="{{ copy_to_id }}"{% endif %}>
+          {{ confirm_label }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro confirm_modal_script() %}
+<script>
+(function () {
+  document.querySelectorAll('.genspark-confirm-submit').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var copyFrom = btn.getAttribute('data-copy-from');
+      var copyTo = btn.getAttribute('data-copy-to');
+      if (copyFrom && copyTo) {
+        var src = document.getElementById(copyFrom);
+        var dst = document.getElementById(copyTo);
+        if (src && dst) dst.value = src.value || '';
+      }
+      // Submission is native: the button is type=submit with a form="..." attribute,
+      // so it works even if this script never runs. Only fall back to a JS submit if
+      // the button is somehow not wired to a form (older markup).
+      if (btn.getAttribute('type') !== 'submit') {
+        var formId = btn.getAttribute('data-form-id');
+        var form = formId && document.getElementById(formId);
+        if (form) form.submit();
+      }
+    });
+  });
+  var pendingFormId = null;
+  document.querySelectorAll('[data-genspark-confirm-form]').forEach(function (trigger) {
+    trigger.addEventListener('click', function () {
+      pendingFormId = trigger.getAttribute('data-genspark-confirm-form');
+      var title = trigger.getAttribute('data-genspark-confirm-title');
+      var message = trigger.getAttribute('data-genspark-confirm-message');
+      var modal = document.getElementById('genspark-shared-confirm-modal');
+      if (!modal) return;
+      if (title) modal.querySelector('.genspark-shared-title').textContent = title;
+      if (message) modal.querySelector('.genspark-shared-message').textContent = message;
+      var confirmBtn = modal.querySelector('.genspark-shared-submit');
+      var confirmClass = trigger.getAttribute('data-genspark-confirm-class') || 'btn-success';
+      confirmBtn.className = 'btn px-4 genspark-shared-submit ' + confirmClass;
+      confirmBtn.textContent = trigger.getAttribute('data-genspark-confirm-label') || 'Confirm';
+      $(modal).modal('show');
+    });
+  });
+  var sharedSubmit = document.querySelector('.genspark-shared-submit');
+  if (sharedSubmit) {
+    sharedSubmit.addEventListener('click', function () {
+      if (pendingFormId) {
+        var form = document.getElementById(pendingFormId);
+        if (form) form.submit();
+      }
+    });
+  }
+})();
+</script>
+{% endmacro %}
+
+{% macro shared_confirm_modal() %}
+<div class="modal fade genspark-confirm-modal" id="genspark-shared-confirm-modal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title font-weight-bold genspark-shared-title">Confirm action</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body text-center px-4 pt-2 pb-3">
+        <div class="genspark-confirm-icon mb-3 text-warning" aria-hidden="true">
+          <i class="fas fa-exclamation-triangle fa-3x"></i>
+        </div>
+        <p class="mb-0 text-secondary genspark-shared-message"></p>
+      </div>
+      <div class="modal-footer border-0 justify-content-center pt-0 pb-4">
+        <button type="button" class="btn btn-secondary px-4" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success px-4 genspark-shared-submit">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}

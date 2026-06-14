@@ -1,0 +1,62 @@
+{% extends "rider/base_rider.html" %}
+{% block page_title %}Earnings{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Earnings</li>{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-4">
+    <div class="small-box bg-success">
+      <div class="inner"><h3>Rs.{{ "%.0f"|format(total_earnings) }}</h3><p>Total Earnings</p></div>
+      <div class="icon"><i class="fas fa-rupee-sign"></i></div>
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="card card-outline card-warning">
+      <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-chart-bar mr-2"></i>Last 7 days</h3></div>
+      <div class="card-body">
+        {% set max_amt = (earnings_series | map(attribute=1) | max) or 1 %}
+        <div class="rider-bars">
+          {% for label, amt in earnings_series %}
+          <div class="rider-bar-col" title="{{ label }}: Rs.{{ '%.0f'|format(amt) }}">
+            <div class="rider-bar" style="height: {{ (8 + (amt / max_amt) * 92) if max_amt else 8 }}%;"></div>
+            <small class="text-muted">{{ label }}</small>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 class="card-title mb-0">Completed Deliveries</h3></div>
+  <div class="card-body table-responsive p-0">
+    {% if not delivered %}
+      <p class="text-muted p-3 mb-0">No completed deliveries yet.</p>
+    {% else %}
+    <table class="table table-striped text-nowrap mb-0">
+      <thead><tr><th>Order</th><th>Drop-off</th><th>Distance</th><th>Delivered</th><th>Earning</th></tr></thead>
+      <tbody>
+        {% for d in delivered %}
+        <tr>
+          <td><strong>{{ d.order_code }}</strong></td>
+          <td>{{ d.dropoff_location or '—' }}</td>
+          <td>{{ "%.1f"|format(d.distance_km or 0) }} km</td>
+          <td>{{ d.delivered_at.strftime('%d %b %Y, %H:%M') if d.delivered_at else '—' }}</td>
+          <td>Rs.{{ "%.0f"|format(d.earning or 0) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .rider-bars { display: flex; align-items: flex-end; gap: 10px; height: 150px; }
+  .rider-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .rider-bar { width: 100%; background: linear-gradient(180deg, #ffc107, #ff9800); border-radius: 3px 3px 0 0; min-height: 4px; }
+</style>
+{% endblock %}

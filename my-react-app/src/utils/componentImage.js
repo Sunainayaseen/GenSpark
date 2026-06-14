@@ -1,14 +1,76 @@
+import { getLocalComponentPhotoUrl } from './componentLocalPhotos';
+
 /**
  * Resolve component image_url from admin DB for display (handles absolute URLs and Flask paths).
  */
+function catalogAssetOrigin(apiBase) {
+  if (import.meta.env.DEV) {
+    return 'http://127.0.0.1:5000';
+  }
+  const base = (apiBase || '').replace(/\/$/, '');
+  if (base) return base;
+  if (typeof window !== 'undefined') return window.location.origin.replace(/\/$/, '');
+  return '';
+}
+
+/** True when DB category/URL clearly does not match product name (e.g. mouse listed as Cabinet). */
+export function isMismatchedCatalogImage(component, dbUrl) {
+  const name = (component?.name || '').toLowerCase();
+  const category = (component?.category || '').toLowerCase();
+  const url = (dbUrl || '').toLowerCase();
+  if (!name) return false;
+
+  const isMouse = /\bmouse\b|mice\b|optical mouse/.test(name);
+  const isKeyboard = /keyboard|keypad/.test(name);
+  const isMonitor = /\bmonitor\b/.test(name);
+  const isRam = /\bram\b|memory|ddr/.test(name);
+
+  if (!(isMouse || isKeyboard || isMonitor || isRam)) return false;
+
+  const catWrong =
+    (isMouse && /cabinet|case|chassis|psu|processor|cpu|gpu|motherboard/.test(category)) ||
+    (isKeyboard && /cabinet|case|chassis|psu|mouse|processor|cpu|gpu/.test(category)) ||
+    (isMonitor && /cabinet|case|psu|mouse|keyboard/.test(category));
+
+  const urlWrong = /cabinet|chassis|pc-case|hero-build|gs-logo|\/case\//.test(url);
+
+  return catWrong || urlWrong;
+}
+
 export function resolveComponentImageUrl(imageUrl, apiBase) {
   const raw = imageUrl != null ? String(imageUrl).trim() : '';
   if (!raw) return null;
   if (/^https?:\/\//i.test(raw) || raw.startsWith('//')) return raw;
+  if (raw.startsWith('/uploads') || raw.startsWith('/static/uploads')) {
+    const origin = catalogAssetOrigin(apiBase);
+    return origin ? `${origin}${raw}` : raw;
+  }
   if (raw.startsWith('/') && apiBase) {
     return `${String(apiBase).replace(/\/$/, '')}${raw}`;
   }
   return raw;
+}
+
+const DISPLAY_CATEGORY = {
+  mouse: 'Mouse',
+  keyboard: 'Keyboard',
+  monitor: 'Monitor',
+  ram: 'RAM',
+  cpu: 'Processor',
+  gpu: 'Graphics card',
+  storage: 'Storage',
+  motherboard: 'Motherboard',
+  psu: 'Power supply',
+  case: 'PC case',
+  cooling: 'Cooling',
+  peripheral: 'Peripheral',
+  generic: 'Component',
+};
+
+/** Badge label: product name wins over wrong DB category (e.g. Mouse not Cabinet). */
+export function getDisplayCategory(category, name) {
+  const kind = getComponentPlaceholderKind(category, name);
+  return DISPLAY_CATEGORY[kind] || category || 'Part';
 }
 
 /**
@@ -34,10 +96,12 @@ function kindFromCategoryLabel(category) {
  * Pick a placeholder "kind" for stock SVG + inline art when no image exists or load fails.
  */
 export function getComponentPlaceholderKind(category, name) {
+  const s = `${category || ''} ${name || ''}`.toLowerCase();
+  if (/\bmouse\b|mice\b|optical mouse|wireless mouse/.test(s)) return 'mouse';
+  if (/keyboard|keypad|mechanical keyboard/.test(s)) return 'keyboard';
+
   const fromCat = kindFromCategoryLabel(category);
   if (fromCat) return fromCat;
-
-  const s = `${category || ''} ${name || ''}`.toLowerCase();
   if (/gpu|graphics|video card|geforce|radeon|rtx|gtx|\brx\s*\d/.test(s)) {
     return 'gpu';
   }
@@ -74,11 +138,12 @@ export function getComponentPlaceholderKind(category, name) {
 /** Static image under /public/component-images/{kind}.svg — last fallback when remote photos fail. */
 export function getCategoryStockImagePath(kind) {
   const k = kind && typeof kind === 'string' ? kind : 'generic';
-  return `/component-images/${k}.svg`;
+  const file = k === 'mouse' || k === 'keyboard' ? 'peripheral' : k;
+  return `/component-images/${file}.svg`;
 }
 
-/** Thematic stock photos (Unsplash) per kind — used when DB has no image_url or it fails. */
-const UNSPLASH_STOCK_QUERY = 'auto=format&fit=crop&w=800&q=80';
+/** Square crop — fills catalog frames consistently. */
+const UNSPLASH_STOCK_QUERY = 'auto=format&fit=crop&w=720&h=720&crop=center&q=85';
 
 const STOCK_PHOTO_BY_KIND = {
   cpu: 'photo-1686195165991-74af7c2918d5',
@@ -90,6 +155,8 @@ const STOCK_PHOTO_BY_KIND = {
   case: 'photo-1573053986275-840ffc7cc685',
   cooling: 'photo-1754821130717-60c970da55dc',
   monitor: 'photo-1593640408182-31c70c8268f5',
+  mouse: 'photo-1527864550417-7fd91fc51a46',
+  keyboard: 'photo-1632078056157-f7eb9c54e9cc',
   peripheral: 'photo-1632078056157-f7eb9c54e9cc',
   generic: 'photo-1518770660439-4636190af475',
 };
@@ -99,3 +166,24 @@ export function getCategoryStockPhotoUrl(kind) {
   const id = STOCK_PHOTO_BY_KIND[k] ?? STOCK_PHOTO_BY_KIND.generic;
   return `https://images.unsplash.com/${id}?${UNSPLASH_STOCK_QUERY}`;
 }
+
+/**
+ * Admin upload (image_url) first; local product photo; then category stock; skip wrong DB URLs.
+ */
+export function getComponentImageCandidates(component, apiBase) {
+  const kind = getComponentPlaceholderKind(component?.category, component?.name);
+  const dbUrl = resolveComponentImageUrl(component?.image_url, apiBase);
+  const localUrl = getLocalComponentPhotoUrl(component);
+  const list = [];
+  if (dbUrl && !isMismatchedCatalogImage(component, dbUrl)) {
+    list.push(dbUrl);
+  }
+  if (localUrl) {
+    list.push(localUrl);
+  }
+  list.push(getCategoryStockPhotoUrl(kind));
+  list.push(getCategoryStockImagePath(kind));
+  return [...new Set(list.filter(Boolean))];
+}
+
+export { getLocalComponentPhotoUrl, isLocalComponentPhotoUrl } from './componentLocalPhotos';

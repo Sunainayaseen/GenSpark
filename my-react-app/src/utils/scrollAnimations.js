@@ -75,6 +75,16 @@ export const initScrollAnimations = () => {
     observer.disconnect();
     mutationObserver.disconnect();
     window.scrollAnimationsInitialized = false;
+    // Strip the "already observed" markers so the next init (StrictMode double
+    // mount, HMR, or route remount) re-observes every element. Without this,
+    // observeElements() skips elements that kept their -initialized class while
+    // their observer was disconnected — leaving [data-scroll] / .scroll-stagger
+    // children stuck at the CSS default opacity:0 (blank page).
+    document
+      .querySelectorAll('.scroll-animate-initialized, .scroll-stagger-initialized')
+      .forEach((el) => {
+        el.classList.remove('scroll-animate-initialized', 'scroll-stagger-initialized');
+      });
   };
 };
 

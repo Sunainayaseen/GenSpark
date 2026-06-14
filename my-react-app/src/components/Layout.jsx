@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import NavLinkPrefetch from './NavLinkPrefetch';
+import { prefetchMainNavRoutes, prefetchRoute } from '../utils/routePrefetch';
 import { loginWithApi } from '../api/authApi';
 import { getApiUrl, getFlaskBase, getFlaskBaseFallback, setFlaskBaseUsed } from '../utils/flaskBase';
 import { getAuthHeaders } from '../utils/authStorage';
@@ -7,6 +9,9 @@ import HeaderSearch from './HeaderSearch';
 import AuthModal from './AuthModal';
 import CartDropdown from './CartDropdown';
 import AIChatbot from './AIChatbot';
+import NotificationToaster from './NotificationToaster';
+import NotificationBell from './NotificationBell';
+import ProfileMenu from './ProfileMenu';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { SITE_LOGO_SRC } from '../branding';
@@ -19,7 +24,7 @@ const Layout = ({ children }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
   const buildsNavActive = location.pathname === '/builds' || location.pathname.startsWith('/builds/');
-  const { cartCount, isCartOpen, setIsCartOpen, toast } = useCart();
+  const { cartCount, isCartOpen, setIsCartOpen, toast, pushToast } = useCart();
   const { user, logout, isLoggedIn, login } = useAuth();
   const navigate = useNavigate();
   const cartRef = useRef(null);
@@ -46,6 +51,14 @@ const Layout = ({ children }) => {
   }, [isCartOpen, setIsCartOpen, isMenuOpen]);
 
   useEffect(() => {
+    prefetchMainNavRoutes();
+  }, []);
+
+  useEffect(() => {
+    prefetchRoute(location.pathname);
+  }, [location.pathname]);
+
+  useEffect(() => {
     const handleScroll = () => {
       const scrollPosition = window.scrollY;
       setIsScrolled(scrollPosition > 20);
@@ -56,13 +69,14 @@ const Layout = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    const root = document.documentElement;
     if (isMenuOpen) {
-      document.body.style.overflow = 'hidden';
+      root.classList.add('scroll-locked');
     } else {
-      document.body.style.overflow = 'unset';
+      root.classList.remove('scroll-locked');
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      root.classList.remove('scroll-locked');
     };
   }, [isMenuOpen]);
 
@@ -73,6 +87,18 @@ const Layout = ({ children }) => {
       setAuthModalOpen(true);
     }
   }, [location.pathname]);
+
+  // After email verification (Flask /api/verify-email success page → ?email_verified=1)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('email_verified') !== '1') return;
+    pushToast('success', 'Email verified. Sign in with your one-time password from registration.');
+    setAuthMode('login');
+    setAuthModalOpen(true);
+    params.delete('email_verified');
+    const next = params.toString();
+    navigate({ pathname: location.pathname, search: next ? `?${next}` : '' }, { replace: true });
+  }, [location.search, location.pathname, navigate]);
 
   // e.g. checkout: ?login=1 opens sign-in, then clean URL
   useEffect(() => {
@@ -109,6 +135,7 @@ const Layout = ({ children }) => {
 
   return (
     <div className="app">
+      <NotificationToaster />
       <a
         href="#main-content"
         className="skip-to-main"
@@ -156,41 +183,41 @@ const Layout = ({ children }) => {
                   ✕
                 </button>
               )}
-              <Link
+              <NavLinkPrefetch
                 to="/"
                 className={location.pathname === '/' ? 'active' : ''}
                 onClick={() => setIsMenuOpen(false)}
               >
                 Home
-              </Link>
-              <Link
+              </NavLinkPrefetch>
+              <NavLinkPrefetch
                 to="/builds"
                 className={buildsNavActive ? 'active' : ''}
                 onClick={() => setIsMenuOpen(false)}
               >
                 Prebuilt PC
-              </Link>
-              <Link
+              </NavLinkPrefetch>
+              <NavLinkPrefetch
                 to="/components"
                 className={location.pathname === '/components' ? 'active' : ''}
                 onClick={() => setIsMenuOpen(false)}
               >
                 Components
-              </Link>
-              <Link
+              </NavLinkPrefetch>
+              <NavLinkPrefetch
                 to="/chatbot"
                 className={location.pathname === '/chatbot' ? 'active' : ''}
                 onClick={() => setIsMenuOpen(false)}
               >
                 AI Assistant
-              </Link>
-              <Link
+              </NavLinkPrefetch>
+              <NavLinkPrefetch
                 to="/about"
                 className={location.pathname === '/about' ? 'active' : ''}
                 onClick={() => setIsMenuOpen(false)}
               >
                 About
-              </Link>
+              </NavLinkPrefetch>
               {isMenuOpen && (
                 <div className="header-actions">
                   <HeaderSearch onAfterNavigate={() => setIsMenuOpen(false)} />
@@ -215,8 +242,8 @@ const Layout = ({ children }) => {
                     <div className="auth-buttons">
                       {isLoggedIn ? (
                         <>
-                          <span className="nav-user-name">{user?.name || user?.email}</span>
-                          <button type="button" className="btn btn-secondary" onClick={() => { logout(); setIsMenuOpen(false); }}>Logout</button>
+                          <NotificationBell />
+                          <ProfileMenu onNavigate={() => setIsMenuOpen(false)} />
                         </>
                       ) : (
                         <>
@@ -272,8 +299,8 @@ const Layout = ({ children }) => {
                   <div className="auth-buttons">
                     {isLoggedIn ? (
                       <>
-                        <span className="nav-user-name">{user?.name || user?.email}</span>
-                        <button type="button" className="btn btn-secondary" onClick={logout}>Logout</button>
+                        <NotificationBell />
+                        <ProfileMenu />
                       </>
                     ) : (
                       <>
@@ -451,7 +478,7 @@ const Layout = ({ children }) => {
             </div>
           </div>
           <div className="footer-bottom">
-            <p>&copy; 2024 GenSpark Builds. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} GenSpark Builds. All rights reserved.</p>
           </div>
         </div>
       </footer>

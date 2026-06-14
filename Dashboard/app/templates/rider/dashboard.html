@@ -1,0 +1,191 @@
+{% extends "rider/base_rider.html" %}
+{% import "rider/_macros.html" as ui %}
+{% block page_title %}Dashboard{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Dashboard</li>{% endblock %}
+
+{% block content %}
+{# ---------- Summary statistics row ---------- #}
+<div class="row">
+  <div class="col-lg-4 col-12">
+    <div class="small-box bg-info">
+      <div class="inner"><h3>{{ pending }}</h3><p>Pending Deliveries</p></div>
+      <div class="icon"><i class="fas fa-box-open"></i></div>
+      <a href="{{ url_for('rider.deliveries') }}" class="small-box-footer">View <i class="fas fa-arrow-circle-right"></i></a>
+    </div>
+  </div>
+  <div class="col-lg-4 col-12">
+    <div class="small-box bg-success">
+      <div class="inner"><h3>{{ completed_today }}</h3><p>Completed Today</p></div>
+      <div class="icon"><i class="fas fa-check-circle"></i></div>
+      <a href="{{ url_for('rider.deliveries') }}" class="small-box-footer">View <i class="fas fa-arrow-circle-right"></i></a>
+    </div>
+  </div>
+  <div class="col-lg-4 col-12">
+    <div class="small-box bg-warning">
+      <div class="inner"><h3>Rs.{{ "%.0f"|format(earnings_today) }}</h3><p>Today&rsquo;s Earnings</p></div>
+      <div class="icon"><i class="fas fa-wallet"></i></div>
+      <a href="{{ url_for('rider.earnings') }}" class="small-box-footer">View <i class="fas fa-arrow-circle-right"></i></a>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  {# ---------- Core: Active Deliveries panel ---------- #}
+  <div class="col-lg-8">
+    <div class="card card-outline card-primary">
+      <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-list-ul mr-2"></i>Active Deliveries</h3>
+        <span class="badge badge-primary float-right">{{ active_deliveries|length }} active</span>
+      </div>
+      <div class="card-body">
+        {% if not active_deliveries %}
+          <p class="text-muted mb-0">No active deliveries right now. New jobs will appear here.</p>
+        {% else %}
+          {% for d in active_deliveries %}
+          <div class="card mb-3 {{ 'border-warning' if d.is_urgent else '' }}">
+            <div class="card-body py-3">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <h5 class="mb-1"><i class="fas fa-receipt text-muted mr-1"></i>{{ d.order_code }}</h5>
+                  <div>{{ ui.status_badge(d) }} {{ ui.priority_badge(d) }}</div>
+                </div>
+                <div class="text-right">
+                  <span class="badge badge-light border"><i class="fas fa-route mr-1"></i>{{ "%.1f"|format(d.distance_km or 0) }} km</span>
+                </div>
+              </div>
+              <hr class="my-2">
+              <div class="row">
+                <div class="col-sm-6 mb-2">
+                  <small class="text-muted text-uppercase">Pickup (Vendor)</small>
+                  <div><i class="fas fa-store text-success mr-1"></i>{{ d.pickup_location or '—' }}</div>
+                </div>
+                <div class="col-sm-6 mb-2">
+                  <small class="text-muted text-uppercase">Drop-off (Customer)</small>
+                  <div><i class="fas fa-map-marker-alt text-danger mr-1"></i>{{ d.dropoff_location or '—' }}</div>
+                </div>
+              </div>
+              <div class="row align-items-center">
+                <div class="col-sm-7">
+                  <small class="text-muted">Payout: <strong>Rs.{{ "%.0f"|format(d.earning or 0) }}</strong></small>
+                </div>
+                <div class="col-sm-5">{{ ui.delivery_action(d) }}</div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ---------- Right column: GPS, earnings chart, profile ---------- #}
+  <div class="col-lg-4">
+    {# GPS / live status #}
+    <div class="card card-outline card-info">
+      <div class="card-header"><h3 class="card-title"><i class="fas fa-satellite-dish mr-2"></i>GPS Tracking (Live)</h3></div>
+      <div class="card-body p-0">
+        <div class="rider-map d-flex align-items-center justify-content-center">
+          <div class="text-center">
+            <i class="fas fa-motorcycle fa-2x text-info"></i>
+            <div class="mt-2 small text-muted">
+              {% if rider.is_online %}
+                <span class="text-success"><i class="fas fa-circle mr-1" style="font-size:.5rem;"></i>Live — tracking on</span>
+              {% else %}
+                <span><i class="fas fa-circle mr-1" style="font-size:.5rem;"></i>Offline — go online to share location</span>
+              {% endif %}
+            </div>
+            <div class="small text-muted">{{ rider.city or 'Location not set' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Earnings history mini bar chart #}
+    <div class="card card-outline card-warning">
+      <div class="card-header"><h3 class="card-title"><i class="fas fa-chart-bar mr-2"></i>Earnings (Last 7 days)</h3></div>
+      <div class="card-body">
+        {% set max_amt = (earnings_series | map(attribute=1) | max) or 1 %}
+        <div class="rider-bars">
+          {% for label, amt in earnings_series %}
+          <div class="rider-bar-col" title="{{ label }}: Rs.{{ '%.0f'|format(amt) }}">
+            <div class="rider-bar" style="height: {{ (8 + (amt / max_amt) * 92) if max_amt else 8 }}%;"></div>
+            <small class="text-muted">{{ label }}</small>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# Profile snapshot #}
+    <div class="card card-outline card-secondary">
+      <div class="card-header"><h3 class="card-title"><i class="fas fa-id-badge mr-2"></i>Profile</h3></div>
+      <div class="card-body">
+        <p class="mb-1"><strong>Rider ID:</strong> {{ rider.display_code }}</p>
+        <p class="mb-1"><strong>Name:</strong> {{ current_user.name }}</p>
+        <p class="mb-1">
+          <strong>Rating:</strong>
+          {% set full = (rider.rating or 0) | round(0, 'floor') | int %}
+          {% for i in range(5) %}
+            <i class="fas fa-star {{ 'text-warning' if i < full else 'text-muted' }}"></i>
+          {% endfor %}
+          <span class="ml-1">{{ "%.1f"|format(rider.rating or 0) }}</span>
+        </p>
+        <p class="mb-0"><strong>Completed:</strong> {{ rider.total_completed or 0 }} deliveries</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .rider-map { height: 150px; background:
+      repeating-linear-gradient(45deg, #f3f6fb, #f3f6fb 12px, #eaf0f8 12px, #eaf0f8 24px);
+      border-radius: .25rem; }
+  .rider-bars { display: flex; align-items: flex-end; gap: 8px; height: 140px; }
+  .rider-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .rider-bar { width: 100%; background: linear-gradient(180deg, #ffc107, #ff9800); border-radius: 3px 3px 0 0; min-height: 4px; }
+
+  /* Live "new delivery" toast */
+  .rider-toast {
+    position: fixed; right: 20px; bottom: 20px; z-index: 1080;
+    background: linear-gradient(135deg, #0f766e, #047857); color: #fff;
+    padding: 14px 18px; border-radius: 12px; font-weight: 600; max-width: 340px;
+    box-shadow: 0 12px 32px rgba(4, 120, 87, 0.4);
+    transform: translateY(24px); opacity: 0; transition: all .35s ease;
+  }
+  .rider-toast--show { transform: translateY(0); opacity: 1; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var last = {{ pending|int }};
+    var url = "{{ url_for('rider.ping_active') }}";
+
+    function showToast(code) {
+      var t = document.createElement('div');
+      t.className = 'rider-toast';
+      t.innerHTML = '<i class="fas fa-motorcycle mr-2"></i> New delivery assigned' +
+        (code ? ': <strong>' + code + '</strong>' : '') + ' — refreshing…';
+      document.body.appendChild(t);
+      requestAnimationFrame(function () { t.classList.add('rider-toast--show'); });
+      setTimeout(function () { window.location.reload(); }, 1600);
+    }
+
+    // Poll every 5s; if the active-delivery count grows, a new job was auto-assigned.
+    setInterval(function () {
+      fetch(url, { credentials: 'include' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (typeof d.active_count === 'number' && d.active_count > last) {
+            last = d.active_count;
+            showToast(d.latest_code);
+          }
+        })
+        .catch(function () { /* ignore transient errors */ });
+    }, 5000);
+  })();
+</script>
+{% endblock %}

@@ -106,7 +106,7 @@ export default function HeaderSearch({ onAfterNavigate }) {
         }
         setSearchLiveResults(Array.isArray(data.components) ? data.components : []);
       } catch (err) {
-        setSearchLiveError(err.message || 'Components load nahi ho sake.');
+        setSearchLiveError(err.message || 'Could not load components. Please try again.');
         setSearchLiveResults([]);
       } finally {
         setSearchLiveLoading(false);
@@ -148,7 +148,7 @@ export default function HeaderSearch({ onAfterNavigate }) {
           <div className="header-search-dropdown-status header-search-dropdown-error">{searchLiveError}</div>
         )}
         {!searchLiveLoading && !searchLiveError && searchLiveResults.length === 0 && (
-          <div className="header-search-dropdown-status">Koi component match nahi hua.</div>
+          <div className="header-search-dropdown-status">No matching components found.</div>
         )}
         {!searchLiveLoading &&
           !searchLiveError &&

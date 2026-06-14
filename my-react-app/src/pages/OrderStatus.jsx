@@ -1,8 +1,69 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { dashboardGet } from '../api/dashboardApi';
 import { ORDER_STAGES, getStageIndex } from '../constants/orderStages';
+import { useAuth } from '../context/AuthContext';
+import { connectSocket, onNotification } from '../realtime/socket';
 import './OrderStatus.css';
+
+/** Professional line-style SVG icons per lifecycle stage (inherit currentColor). */
+const _svg = (children) => (
+  <svg
+    width="22" height="22" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {children}
+  </svg>
+);
+const STEP_ICONS = {
+  // Order placed — document
+  pending: _svg(
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+      <line x1="10" y1="9" x2="8" y2="9" />
+    </>
+  ),
+  // Admin approved — shield check
+  approved: _svg(
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <polyline points="9 11.5 11.2 13.7 15 9.5" />
+    </>
+  ),
+  // Vendor processing — tool/wrench
+  processing: _svg(
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  ),
+  // Ready to ship — package
+  ready_to_dispatch: _svg(
+    <>
+      <line x1="16.5" y1="9.4" x2="7.5" y2="4.21" />
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+      <line x1="12" y1="22.08" x2="12" y2="12" />
+    </>
+  ),
+  // Dispatched — truck
+  shipped: _svg(
+    <>
+      <rect x="1" y="3" width="15" height="13" rx="1" />
+      <path d="M16 8h4l3 3v5h-7V8z" />
+      <circle cx="5.5" cy="18.5" r="2.5" />
+      <circle cx="18.5" cy="18.5" r="2.5" />
+    </>
+  ),
+  // Delivered — check circle
+  completed: _svg(
+    <>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </>
+  ),
+};
 
 /** eCommerce orders live in /api/ecom — shape differs from PC-build orders. */
 function adaptEcomOrder(e) {
@@ -122,9 +183,13 @@ const OrderStatus = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Bumped by the live channel (Socket.IO / poll) to silently re-fetch the order.
+  const [refreshTick, setRefreshTick] = useState(0);
+  const hadOrder = useRef(false);
 
   useEffect(() => {
     if (!id) {
@@ -134,7 +199,8 @@ const OrderStatus = () => {
       return;
     }
     const loadOrder = async () => {
-      setLoading(true);
+      // Only show the full spinner on the first load — live refreshes are silent.
+      if (!hadOrder.current) setLoading(true);
       setError('');
       try {
         const res = await dashboardGet(`/orders/${id}`);
@@ -164,10 +230,29 @@ const OrderStatus = () => {
         }
       } finally {
         setLoading(false);
+        hadOrder.current = true;  // subsequent live refreshes are silent
       }
     };
     loadOrder();
-  }, [id]);
+  }, [id, refreshTick]);
+
+  // --- Live status updates (KFC-style): refresh on a Socket.IO notification for
+  // this order, with a slow poll as a fallback. No map — just live status/timeline.
+  useEffect(() => {
+    if (!id) return undefined;
+    if (user?.id) connectSocket(user);
+    const off = onNotification((n) => {
+      const rid = n?.related_id;
+      if (rid == null || Number(rid) === Number(id)) {
+        setRefreshTick((t) => t + 1);
+      }
+    });
+    const timer = setInterval(() => setRefreshTick((t) => t + 1), 15000);
+    return () => {
+      off();
+      clearInterval(timer);
+    };
+  }, [id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const timeline = useMemo(
     () => (order?.status_history || []).map((entry) => ({
@@ -247,8 +332,11 @@ const OrderStatus = () => {
               </p>
             ) : null}
             <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-              <button type="button" className="btn btn-primary" onClick={() => navigate('/builds')}>
-                View predefined PCs
+              <button type="button" className="btn btn-primary" onClick={() => navigate('/my-orders')}>
+                View my orders
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => navigate('/builds')}>
+                Browse predefined PCs
               </button>
             </div>
           </div>
@@ -258,10 +346,6 @@ const OrderStatus = () => {
   }
 
   const isEcom = order._source === 'ecom';
-  const stepperFillWidth =
-    currentStepIndex >= 0 && ORDER_STAGES.length > 1
-      ? `${(currentStepIndex / (ORDER_STAGES.length - 1)) * 100}%`
-      : '0%';
 
   return (
     <div className="order-status-page">
@@ -269,6 +353,7 @@ const OrderStatus = () => {
         <header className="os-hero">
           <div className="os-hero__main">
             <Link to="/my-orders" className="os-back">← My orders</Link>
+            <span className="os-hero__eyebrow">Order Tracking</span>
             <h1>{order.order_number || `Order #${order.id}`}</h1>
             <p className="os-hero__meta">
               <span className={statusBadgeClass(order.status)}>{formatStatusLabel(order.status)}</span>
@@ -276,43 +361,61 @@ const OrderStatus = () => {
               <span>{isEcom ? 'Shop order' : 'Custom PC build'}</span>
             </p>
           </div>
-          <div className="os-hero__actions">
-            {isEcom ? (
-              <button type="button" className="btn btn-secondary" disabled>
-                Shop order — {order.status}
-              </button>
-            ) : order.status === 'pending' ? (
-              <button type="button" className="btn btn-secondary" disabled>Waiting for Admin Approval</button>
-            ) : order.status === 'rejected' ? (
-              <button type="button" className="btn btn-secondary" disabled>Rejected</button>
-            ) : order.status === 'ready_to_dispatch' ? (
-              <button type="button" className="btn btn-primary" disabled title="Vendors will ship your order soon">
-                Ready to ship
-              </button>
-            ) : order.status === 'shipped' ? (
-              <button type="button" className="btn btn-secondary" disabled>Shipped</button>
-            ) : order.status === 'completed' ? (
-              <button type="button" className="btn btn-secondary" disabled>Completed</button>
-            ) : (
-              <button type="button" className="btn btn-secondary" disabled>Vendor orders in progress</button>
-            )}
+          <div className="os-hero__facts">
+            <div className="os-fact os-fact--accent">
+              <span className="os-fact__label">Total</span>
+              <span className="os-fact__value">PKR {priceBreakdown.total.toLocaleString()}</span>
+            </div>
+            <div className="os-fact">
+              <span className="os-fact__label">Items</span>
+              <span className="os-fact__value">{(order.items || []).length}</span>
+            </div>
+            <div className="os-fact">
+              <span className="os-fact__label">Placed</span>
+              <span className="os-fact__value">
+                {order.status_history?.[0]?.created_at
+                  ? new Date(order.status_history[0].created_at).toLocaleDateString('en-PK', { day: '2-digit', month: 'short' })
+                  : '—'}
+              </span>
+            </div>
           </div>
         </header>
 
         <div className="order-content">
           <section className="order-card" aria-labelledby="order-summary-heading">
             <div className="order-header">
-              <h2 id="order-summary-heading">{isEcom ? 'Shop order' : 'Order summary'}</h2>
+              <div className="order-header__title">
+                <h2 id="order-summary-heading">{isEcom ? 'Shop order' : 'Order summary'}</h2>
+                {(order.items || []).length > 0 && (
+                  <span className="os-items-count">
+                    {order.items.length} item{order.items.length > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
               <div className="order-price">PKR {priceBreakdown.total.toLocaleString()}</div>
             </div>
             {(order.items || []).length > 0 && (
               <ul className="os-items-list" aria-label="Order items">
-                {order.items.map((it) => (
-                  <li key={it.id ?? `${it.item_id}-${it.component_name}`}>
-                    <strong>{it.component_name || `Item #${it.item_id}`}</strong>
-                    <span>×{it.quantity} · PKR {Number(it.total_price || 0).toLocaleString()}</span>
-                  </li>
-                ))}
+                {order.items.map((it) => {
+                  const qty = Number(it.quantity || 1);
+                  const total = Number(it.total_price || 0);
+                  const unit = it.unit_price != null
+                    ? Number(it.unit_price)
+                    : (qty ? total / qty : total);
+                  return (
+                    <li key={it.id ?? `${it.item_id}-${it.component_name}`}>
+                      <div className="os-item-info">
+                        <strong className="os-item-name">
+                          {it.component_name || `Item #${it.item_id}`}
+                        </strong>
+                        <span className="os-item-meta">
+                          Qty {qty} · PKR {Math.round(unit).toLocaleString()} each
+                        </span>
+                      </div>
+                      <span className="os-item-total">PKR {total.toLocaleString()}</span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             <div className="order-price-breakdown" role="table" aria-label="Order pricing">
@@ -330,12 +433,6 @@ const OrderStatus = () => {
               </div>
             </div>
             <div className="os-detail-grid">
-              <div className="os-detail-item">
-                <span className="os-detail-item__label">Vendor</span>
-                <span className="os-detail-item__value">
-                  {isEcom ? 'N/A (direct shop order)' : 'Multi-vendor split after admin approval'}
-                </span>
-              </div>
               {order.shipping_address && (
                 <div className="os-detail-item">
                   <span className="os-detail-item__label">Delivery</span>
@@ -347,7 +444,12 @@ const OrderStatus = () => {
 
           <section className="status-timeline os-section" aria-labelledby="order-status-heading">
             <div className="os-section__head">
-              <span className="os-section__icon" aria-hidden="true">📍</span>
+              <span className="os-section__icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+              </span>
               <h3 id="order-status-heading">Order Status</h3>
             </div>
             {order.status === 'rejected' || order.status === 'cancelled' ? (
@@ -363,16 +465,13 @@ const OrderStatus = () => {
                   </p>
                 ) : null}
                 <div className="os-stepper-wrap">
-                  <div className="os-stepper-track" aria-hidden="true">
-                    <div className="os-stepper-fill" style={{ width: stepperFillWidth }} />
-                  </div>
                   <div className="status-bar">
                     {ORDER_STAGES.map((step, idx) => (
                       <div
                         key={step.key}
                         className={`status-step ${idx <= currentStepIndex ? 'active' : ''} ${idx === currentStepIndex ? 'current' : ''}`}
                       >
-                        <div className="step-icon">{step.icon}</div>
+                        <div className="step-icon">{STEP_ICONS[step.key] || step.icon}</div>
                         <div className="step-label">{step.label}</div>
                       </div>
                     ))}
@@ -384,7 +483,12 @@ const OrderStatus = () => {
 
           <section className="timeline-entries os-section" aria-labelledby="timeline-heading">
             <div className="os-section__head">
-              <span className="os-section__icon" aria-hidden="true">🔔</span>
+              <span className="os-section__icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              </span>
               <div>
                 <h3 id="timeline-heading">Timeline &amp; Notifications</h3>
                 <p className="os-section__sub">Updates as your order moves through each stage</p>
@@ -419,7 +523,14 @@ const OrderStatus = () => {
 
           <section className="timeline-entries os-section" aria-labelledby="vendor-progress-heading">
             <div className="os-section__head">
-              <span className="os-section__icon" aria-hidden="true">🏪</span>
+              <span className="os-section__icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l1.5-5h15L21 9" />
+                  <path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9" />
+                  <path d="M3 9h18" />
+                  <path d="M9 20v-6h6v6" />
+                </svg>
+              </span>
               <div>
                 <h3 id="vendor-progress-heading">Per-Vendor Progress</h3>
                 <p className="os-section__sub">Each supplier fulfills their part of your build</p>
@@ -427,7 +538,12 @@ const OrderStatus = () => {
             </div>
             {!order.vendor_orders?.length ? (
               <div className="os-empty-vendor">
-                <div className="os-empty-vendor__icon" aria-hidden="true">⏳</div>
+                <div className="os-empty-vendor__icon" aria-hidden="true">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                </div>
                 <p>Vendor orders will appear here after admin approval.</p>
               </div>
             ) : (

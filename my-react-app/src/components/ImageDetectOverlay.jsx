@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
+import { useCart } from '../context/CartContext';
 import './ImageDetectOverlay.css';
 
-const DISPLAY_CONFIRM_THRESHOLD_PCT = 80;
+const DISPLAY_CONFIRM_THRESHOLD_PCT = 45; // match backend + Chatbot (45)
 
 const labelForDetection = (d) => {
   const conf = Math.min(Math.max(Number(d.confidence) ?? 0, 0), 100);
@@ -45,9 +46,15 @@ const resolveXyxy = (d, nw, nh) => {
   ];
 };
 
+const matchesOf = (d) => (Array.isArray(d?.matches) ? d.matches : []);
+const formatPrice = (v) => `Rs ${Math.round(Number(v) || 0).toLocaleString('en-PK')}`;
+
 /**
  * Responsive image with SVG overlay in original pixel space (viewBox = natural image).
- * Expects Flask `/api/detect/component` fields: xyxy, class_name, confidence (%), optional image_width/height.
+ * Boxes whose detection resolved to in-stock catalog components become clickable and
+ * open a popover with name / price / Add to Cart.
+ * Expects Flask `/api/detect/component` fields: xyxy, class_name, confidence (%),
+ * optional image_width/height, and `matches` (in-stock components from the DB).
  */
 export default function ImageDetectOverlay({
   src,
@@ -57,6 +64,11 @@ export default function ImageDetectOverlay({
   alt = 'Uploaded image',
 }) {
   const [intrinsic, setIntrinsic] = useState({ w: naturalWidth || 0, h: naturalHeight || 0 });
+  const [activeIndex, setActiveIndex] = useState(null);
+  const [addingId, setAddingId] = useState(null);
+  const [addedIds, setAddedIds] = useState(() => new Set());
+
+  const { addToCart } = useCart();
 
   const onImgLoad = useCallback(
     (e) => {
@@ -70,6 +82,40 @@ export default function ImageDetectOverlay({
   const nh = Number(naturalHeight || intrinsic.h) || 0;
   const hasOverlay = detections.length > 0 && nw > 0 && nh > 0;
 
+  const activeDet = activeIndex != null ? detections[activeIndex] : null;
+  const activeMatches = matchesOf(activeDet);
+
+  // Position the popover relative to the active box (percentages map cleanly onto
+  // the frame since the SVG viewBox == natural image size). Flip side/edge near borders.
+  const popStyle = useMemo(() => {
+    if (!activeDet || !nw || !nh) return null;
+    const xy = resolveXyxy(activeDet, nw, nh);
+    if (!xy) return null;
+    const [x1, y1, x2, y2] = xy;
+    const anchorRight = x1 / nw > 0.55;
+    const anchorTop = y2 / nh > 0.62;
+    const style = {};
+    if (anchorRight) style.right = `${Math.max(0, (1 - x2 / nw) * 100)}%`;
+    else style.left = `${Math.max(0, (x1 / nw) * 100)}%`;
+    if (anchorTop) style.bottom = `${Math.max(0, (1 - y1 / nh) * 100)}%`;
+    else style.top = `${Math.min(98, (y2 / nh) * 100)}%`;
+    return style;
+  }, [activeDet, nw, nh]);
+
+  const handleAdd = async (m) => {
+    if (!m?.id || addingId) return;
+    setAddingId(m.id);
+    const ok = await addToCart({ ...m, item_type: 'component' });
+    setAddingId(null);
+    if (ok) {
+      setAddedIds((prev) => {
+        const next = new Set(prev);
+        next.add(m.id);
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="image-detect-frame">
       <img src={src} alt={alt} className="image-detect-img" onLoad={onImgLoad} loading="lazy" />
@@ -78,7 +124,6 @@ export default function ImageDetectOverlay({
           className="image-detect-svg"
           viewBox={`0 0 ${nw} ${nh}`}
           preserveAspectRatio="xMidYMid meet"
-          aria-hidden
         >
           {detections.map((d, i) => {
             const xy = resolveXyxy(d, nw, nh);
@@ -88,12 +133,33 @@ export default function ImageDetectOverlay({
             const rh = Math.max(0, y2 - y1);
             const { title, sub, pct } = labelForDetection(d);
             const stroke = strokeForDetection(d);
+            const matchCount = matchesOf(d).length;
+            const clickable = matchCount > 0;
+            const isActive = activeIndex === i;
             const chipY = Math.max(0, y1 - 22);
             const chipH = 20;
-            const line1 = sub ? `${title} ${pct.toFixed(1)}% · ${sub}` : `${title} ${pct.toFixed(1)}%`;
+            const base = sub ? `${title} ${pct.toFixed(1)}% · ${sub}` : `${title} ${pct.toFixed(1)}%`;
+            const line1 = clickable ? `${base} · ${matchCount} in stock ▸` : base;
+            const chipW = Math.min(Math.max(0, nw - x1 - 4), clickable ? 280 : 240);
 
             return (
-              <g key={`det-${i}`}>
+              <g
+                key={`det-${i}`}
+                style={{ cursor: clickable ? 'pointer' : 'default' }}
+                onClick={clickable ? () => setActiveIndex(isActive ? null : i) : undefined}
+              >
+                {/* transparent hit area so the whole box is clickable, not just the stroke */}
+                {clickable && (
+                  <rect
+                    x={x1}
+                    y={y1}
+                    width={rw}
+                    height={rh}
+                    fill="#000"
+                    fillOpacity={0}
+                    pointerEvents="all"
+                  />
+                )}
                 <rect
                   x={x1}
                   y={y1}
@@ -101,17 +167,19 @@ export default function ImageDetectOverlay({
                   height={rh}
                   fill="none"
                   stroke={stroke}
-                  strokeWidth={2}
+                  strokeWidth={isActive ? 4 : 2}
                   rx={3}
                   vectorEffect="non-scaling-stroke"
+                  pointerEvents="none"
                 />
                 <rect
                   x={x1}
                   y={chipY}
-                  width={Math.min(Math.max(0, nw - x1 - 4), 240)}
+                  width={chipW}
                   height={chipH}
-                  fill="rgba(15, 23, 42, 0.88)"
+                  fill={isActive ? stroke : 'rgba(15, 23, 42, 0.88)'}
                   rx={3}
+                  pointerEvents="none"
                 />
                 <text
                   x={x1 + 6}
@@ -120,6 +188,7 @@ export default function ImageDetectOverlay({
                   fontSize="11"
                   fontWeight="600"
                   fontFamily="system-ui, sans-serif"
+                  pointerEvents="none"
                 >
                   {line1}
                 </text>
@@ -127,6 +196,75 @@ export default function ImageDetectOverlay({
             );
           })}
         </svg>
+      )}
+
+      {activeDet && (
+        <>
+          <button
+            type="button"
+            className="detect-popover-backdrop"
+            aria-label="Close product list"
+            onClick={() => setActiveIndex(null)}
+          />
+          <div className="detect-popover" style={popStyle || undefined} role="dialog">
+            <div className="detect-popover-head">
+              <span className="detect-popover-title">
+                {labelForDetection(activeDet).title} — in stock
+              </span>
+              <button
+                type="button"
+                className="detect-popover-close"
+                aria-label="Close"
+                onClick={() => setActiveIndex(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            {activeMatches.length === 0 ? (
+              <p className="detect-popover-empty">No in-stock matches found.</p>
+            ) : (
+              <ul className="detect-match-list">
+                {activeMatches.map((m) => {
+                  const added = addedIds.has(m.id);
+                  const busy = addingId === m.id;
+                  return (
+                    <li className="detect-match-row" key={m.id}>
+                      {m.image_url ? (
+                        <img
+                          className="detect-match-thumb"
+                          src={m.image_url}
+                          alt=""
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <span className="detect-match-thumb detect-match-thumb--ph" aria-hidden />
+                      )}
+                      <div className="detect-match-info">
+                        <span className="detect-match-name" title={m.name}>
+                          {m.name}
+                        </span>
+                        <span className="detect-match-meta">
+                          {formatPrice(m.price)} · {Number(m.stock) || 0} in stock
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className={`detect-match-add${added ? ' is-added' : ''}`}
+                        onClick={() => handleAdd(m)}
+                        disabled={busy || added}
+                      >
+                        {added ? 'Added ✓' : busy ? '…' : 'Add'}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

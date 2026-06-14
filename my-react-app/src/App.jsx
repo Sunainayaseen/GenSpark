@@ -11,8 +11,10 @@ import { initParallax } from "./utils/parallax";
 import { getApiUrl } from "./utils/flaskBase";
 
 import Landing from "./pages/Landing";
-const Chatbot = lazy(() => import("./pages/Chatbot"));
-const BuildSuggestions = lazy(() => import("./pages/BuildSuggestions"));
+import About from "./pages/About";
+import Components from "./pages/Components";
+import BuildSuggestions from "./pages/BuildSuggestions";
+import Chatbot from "./pages/Chatbot";
 const PrebuiltDetail = lazy(() => import("./pages/PrebuiltDetail"));
 const BuildConfigurator = lazy(() => import("./pages/BuildConfigurator"));
 const VendorAssignment = lazy(() => import("./pages/VendorAssignment"));
@@ -20,7 +22,6 @@ const OrderStatus = lazy(() => import("./pages/OrderStatus"));
 const VendorDashboard = lazy(() => import("./pages/VendorDashboard"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const Contact = lazy(() => import("./pages/Contact"));
-const About = lazy(() => import("./pages/About"));
 import ChangePassword from "./pages/ChangePassword";
 const CartPage = lazy(() => import("./pages/CartPage"));
 const Checkout = lazy(() => import("./pages/Checkout"));
@@ -30,16 +31,18 @@ const CheckoutPage = lazy(() => import("./ecommerce/CheckoutPage"));
 const OrderSuccess = lazy(() => import("./ecommerce/OrderSuccess"));
 const AdminEcomPanel = lazy(() => import("./ecommerce/AdminEcomPanel"));
 const MyOrders = lazy(() => import("./pages/MyOrders"));
-const Components = lazy(() => import("./pages/Components"));
+const TrackOrder = lazy(() => import("./pages/TrackOrder"));
 
 import Layout from "./components/Layout";
+import StripeVerifyTest from "./components/StripeVerifyTest";
+import { prefetchMainNavRoutes } from "./utils/routePrefetch";
 
 import "./App.css";
 
 function RouteFallback() {
   return (
-    <div className="page-loading" role="status" aria-live="polite" aria-busy="true">
-      <span className="loading-spinner" aria-hidden="true" />
+    <div className="route-loading" role="status" aria-live="polite" aria-busy="true">
+      <div className="route-loading-bar" aria-hidden="true" />
       <span className="sr-only">Loading page</span>
     </div>
   );
@@ -56,35 +59,14 @@ function MustChangePasswordGate({ children }) {
   return children;
 }
 
-// Component to handle page transitions
 function AnimatedRoutes() {
   const location = useLocation();
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     const cleanup = initScrollAnimations();
-
-    const mainContent = document.querySelector(".main-content");
-
-    if (mainContent) {
-      mainContent.classList.add("page-enter");
-
-      setTimeout(() => {
-        mainContent.classList.add("page-enter-active");
-        mainContent.classList.remove("page-enter");
-      }, 10);
-    }
-
     return () => {
       if (cleanup) cleanup();
-
-      if (mainContent) {
-        mainContent.classList.add("page-exit");
-        mainContent.classList.add("page-exit-active");
-
-        setTimeout(() => {
-          mainContent.classList.remove("page-exit", "page-exit-active");
-        }, 300);
-      }
     };
   }, [location.pathname]);
 
@@ -99,12 +81,14 @@ function AnimatedRoutes() {
       <Route path="/vendor-assignment" element={<VendorAssignment />} />
       <Route path="/cart" element={<CartPage />} />
       <Route path="/checkout" element={<Checkout />} />
+      <Route path="/stripe-verify" element={<StripeVerifyTest />} />
       <Route path="/order-success" element={<OrderPlacedSuccess />} />
       <Route path="/ecom/cart" element={<EcomCartPage />} />
       <Route path="/ecom/checkout" element={<CheckoutPage />} />
       <Route path="/ecom/success" element={<OrderSuccess />} />
       <Route path="/ecom/admin" element={<AdminEcomPanel />} />
       <Route path="/my-orders" element={<MyOrders />} />
+      <Route path="/track/:orderId" element={<TrackOrder />} />
       <Route path="/order/:id" element={<OrderStatus />} />
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/vendor/dashboard" element={<VendorDashboard />} />
@@ -132,7 +116,16 @@ function App() {
 
     fetchApi();
 
+    const idleId =
+      typeof requestIdleCallback === 'function'
+        ? requestIdleCallback(() => prefetchMainNavRoutes(), { timeout: 2500 })
+        : window.setTimeout(prefetchMainNavRoutes, 600);
     return () => {
+      if (typeof requestIdleCallback === 'function' && typeof cancelIdleCallback === 'function') {
+        cancelIdleCallback(idleId);
+      } else {
+        clearTimeout(idleId);
+      }
       if (scrollCleanup) scrollCleanup();
       if (parallaxCleanup) parallaxCleanup();
     };

@@ -1,5 +1,5 @@
 .configurator-page {
-  padding: calc(var(--spacing-2xl) + 2rem) 0;
+  padding: calc(var(--spacing-2xl) + 1.5rem) 0 var(--spacing-2xl);
   min-height: calc(100vh - 200px);
 }
 
@@ -10,8 +10,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-lg);
-  padding-bottom: var(--spacing-xl);
-  margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
   border-bottom: 1px solid var(--border);
 }
 
@@ -23,26 +23,27 @@
 
 .config-page-eyebrow {
   margin: 0 0 var(--spacing-xs);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--primary);
+  opacity: 0.85;
 }
 
 .config-page-title {
   margin: 0 0 var(--spacing-sm);
-  font-size: clamp(1.75rem, 2.5vw, 2.25rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-size: clamp(1.85rem, 2.6vw, 2.35rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
   color: var(--text-primary);
 }
 
 .config-page-lede {
   margin: 0 0 var(--spacing-md);
-  font-size: 1rem;
-  line-height: 1.55;
+  font-size: 1.02rem;
+  line-height: 1.6;
   color: var(--text-secondary);
 }
 
@@ -50,19 +51,19 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 0.4rem 0.85rem;
+  padding: 0.45rem 0.9rem;
   border-radius: 999px;
-  background: rgba(var(--primary-rgb), 0.1);
-  border: 1px solid rgba(var(--primary-rgb), 0.35);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.1), rgba(var(--primary-rgb), 0.04));
+  border: 1px solid rgba(var(--primary-rgb), 0.22);
   font-size: 0.875rem;
 }
 
 .config-build-chip-label {
-  font-weight: 600;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
 }
 
 .config-build-chip-name {
@@ -77,23 +78,27 @@
 .config-back-btn {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: 0.5rem;
   flex-shrink: 0;
-  padding: 0.6rem 1rem;
+  padding: 0.65rem 1.1rem;
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
-  background: var(--bg-secondary);
+  background: #fff;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: 999px;
   cursor: pointer;
+  box-shadow: 0 1px 2px var(--shadow);
   transition: var(--transition);
 }
 
 .config-back-btn:hover {
   border-color: var(--primary);
-  background: rgba(var(--primary-rgb), 0.08);
+  background: rgba(var(--primary-rgb), 0.06);
   color: var(--primary);
+  box-shadow: 0 4px 14px rgba(var(--primary-rgb), 0.14);
+  transform: translateY(-1px);
 }
 
 .config-back-btn:focus-visible {
@@ -101,47 +106,40 @@
   outline-offset: 2px;
 }
 
+/* —— Layout: two independent cards —— */
 .configurator-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0;
-  margin-top: var(--spacing-xl);
-  align-items: stretch;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  background: rgba(15, 23, 42, 0.03);
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-lg);
+  align-items: start;
 }
 
 .compatibility-panel,
 .filters-panel {
-  background: var(--bg-primary);
-  border-radius: 0;
-  padding: 0;
-  box-shadow: none;
-  border: none;
-  border-right: 1px solid rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 30px var(--shadow), 0 1px 2px rgba(45, 48, 46, 0.04);
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  height: 100%;
-}
-
-.filters-panel {
-  border-right: none;
-}
-
-.config-panel {
   overflow: hidden;
+}
+
+.compatibility-panel {
+  position: sticky;
+  top: calc(var(--header-offset, 88px) + var(--spacing-lg));
 }
 
 .config-panel-head {
   padding: var(--spacing-lg) var(--spacing-xl);
-  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
-  background: rgba(15, 23, 42, 0.02);
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(var(--primary-rgb), 0.01));
 }
 
 .config-panel-title {
-  margin: 0 0 var(--spacing-xs);
-  font-size: 1.125rem;
+  margin: 0 0 0.35rem;
+  font-size: 1.18rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -154,9 +152,11 @@
   color: var(--text-secondary);
 }
 
+/* Gutter alignment for the inner sections */
 .compatibility-panel > .compatibility-status,
 .compatibility-panel > .price-breakdown,
-.compatibility-panel > .config-cta-primary,
+.compatibility-panel > .cfg-gap-note,
+.compatibility-panel > .config-cta-group,
 .filters-panel > .compatible-parts,
 .filters-panel > .config-build-components {
   margin-left: var(--spacing-xl);
@@ -164,11 +164,11 @@
 }
 
 .compatibility-panel > .compatibility-status {
-  margin-top: var(--spacing-md);
+  margin-top: var(--spacing-lg);
 }
 
 .compatibility-panel > .price-breakdown {
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-md);
 }
 
 .filters-panel .config-build-components + .compatible-parts {
@@ -179,57 +179,78 @@
   margin-bottom: var(--spacing-xl);
 }
 
-.compatibility-panel > .config-cta-primary {
-  margin: var(--spacing-lg) var(--spacing-xl) var(--spacing-xl);
-  align-self: stretch;
-  width: auto;
-}
-
+/* —— Status chips —— */
 .compatibility-status {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem 0.5rem;
+  gap: 0.5rem;
   margin-bottom: var(--spacing-md);
-  padding: 0.4rem 0.65rem;
-  max-width: fit-content;
-  border-radius: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.3;
-  color: var(--success);
-  background: rgba(107, 154, 61, 0.09);
-  border: 1px solid rgba(107, 154, 61, 0.22);
 }
 
-.compat-inline-badge::before {
-  content: '✓';
-  margin-right: 0.3rem;
-  font-size: 0.7rem;
+.cfg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+}
+
+.cfg-chip::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
   opacity: 0.95;
 }
 
-.compat-inline-sep {
-  color: #94a3b8;
-  font-weight: 500;
-  user-select: none;
+.cfg-chip--ok { color: #15803d; background: #ecfdf3; border-color: #bbf7d0; }
+.cfg-chip--warn { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.cfg-chip--bad { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+.cfg-chip--muted { color: #475569; background: #f1f5f9; border-color: #cbd5e1; }
+
+/* —— Inventory-gap note —— */
+.cfg-gap-note {
+  margin-bottom: var(--spacing-md);
+  padding: 0.8rem 0.95rem;
+  border-radius: var(--radius-md);
+  background: #fffbeb;
+  border: 1px solid #fde68a;
 }
 
+.cfg-gap-note p {
+  margin: 0 0 0.25rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #7c2d12;
+}
+
+.cfg-gap-note p:last-child { margin-bottom: 0; }
+.cfg-gap-note strong { color: #9a3412; }
+.cfg-gap-note .cfg-gap-hint { color: #9a3412; opacity: 0.8; font-style: italic; }
+
+/* —— Price estimate card —— */
 .price-breakdown {
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
   padding: var(--spacing-lg);
-  background: rgba(15, 23, 42, 0.03);
-  border-radius: 0;
-  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
 }
 
 .price-breakdown-title {
-  margin: 0 0 var(--spacing-md);
-  font-size: 1rem;
+  margin: 0 0 var(--spacing-sm);
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 .price-item {
@@ -237,13 +258,13 @@
   justify-content: space-between;
   align-items: baseline;
   gap: var(--spacing-md);
-  padding: var(--spacing-sm) 0;
+  padding: 0.6rem 0;
   border-bottom: 1px solid var(--border);
 }
 
 .price-item-label {
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
 }
 
 .price-item-value {
@@ -254,36 +275,61 @@
 }
 
 .price-item.total {
-  border-top: 2px solid rgba(var(--primary-rgb), 0.45);
+  border-top: 2px solid rgba(var(--primary-rgb), 0.18);
   border-bottom: none;
-  margin-top: var(--spacing-md);
+  margin-top: 0.5rem;
   padding-top: var(--spacing-md);
-  font-weight: 700;
-  font-size: 1.15rem;
-  color: var(--primary);
 }
 
 .price-item.total .price-item-label,
 .price-item.total .price-item-value {
   color: var(--primary);
-  font-weight: 700;
-  font-size: 1.15rem;
+  font-weight: 800;
+  font-size: 1.28rem;
+  letter-spacing: -0.01em;
 }
 
-.config-cta-primary {
+/* —— CTA group —— */
+.config-cta-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-bottom: var(--spacing-xl);
+}
+
+.config-cta-group .btn {
+  width: 100%;
+}
+
+.config-cta-group .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: grayscale(0.3);
+}
+
+.cfg-inline-msg {
+  margin: 0.1rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.cfg-inline-msg--error {
+  color: #b91c1c;
   font-weight: 600;
-  letter-spacing: 0.01em;
 }
 
-/* Current build parts (replaces Search & swap header) */
+/* —— Configured components —— */
 .config-build-components {
   padding: var(--spacing-lg) 0 var(--spacing-md);
-  border-bottom: 1px solid var(--border);
 }
 
 .config-build-components-title {
-  margin: 0 0 var(--spacing-xs);
-  font-size: 1.125rem;
+  margin: 0 0 0.3rem;
+  font-size: 1.18rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -291,7 +337,7 @@
 
 .config-build-components-lede {
   margin: 0 0 var(--spacing-md);
-  font-size: 0.8125rem;
+  font-size: 0.85rem;
   line-height: 1.45;
   color: var(--text-secondary);
 }
@@ -302,43 +348,56 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background: rgba(15, 23, 42, 0.02);
+  background: #fff;
 }
 
 .config-build-component-row {
   display: grid;
-  grid-template-columns: minmax(5.5rem, 7rem) 1fr auto;
-  gap: var(--spacing-sm);
-  align-items: start;
-  padding: var(--spacing-sm) var(--spacing-md);
-  font-size: 0.875rem;
+  grid-template-columns: minmax(6rem, 7.5rem) 1fr auto;
+  gap: var(--spacing-md);
+  align-items: center;
+  padding: 0.85rem var(--spacing-md);
+  font-size: 0.9rem;
   line-height: 1.4;
   border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
 }
 
 .config-build-component-row:last-child {
   border-bottom: none;
 }
 
+.config-build-component-row:hover {
+  background: rgba(var(--primary-rgb), 0.04);
+}
+
 .config-build-component-slot {
+  justify-self: start;
+  padding: 0.22rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(var(--primary-rgb), 0.09);
   font-weight: 700;
   color: var(--primary);
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
 }
 
 .config-build-component-value {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
   color: var(--text-primary);
+  font-weight: 500;
   word-break: break-word;
 }
 
 .config-build-component-price {
-  font-weight: 600;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   text-align: right;
@@ -353,7 +412,7 @@
 @media (max-width: 520px) {
   .config-build-component-row {
     grid-template-columns: 1fr;
-    gap: 0.25rem;
+    gap: 0.4rem;
   }
 
   .config-build-component-price,
@@ -362,15 +421,16 @@
   }
 }
 
+/* —— Search results —— */
 .compatible-parts {
-  margin-top: var(--spacing-xl);
-  padding-top: var(--spacing-xl);
-  border-top: 2px solid var(--border);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border);
 }
 
 .compatible-parts h3 {
   margin: 0 0 var(--spacing-md);
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text-primary);
 }
@@ -383,17 +443,16 @@
 
 .part-option {
   padding: var(--spacing-md);
-  background: rgba(15, 23, 42, 0.02);
-  border-radius: 0;
+  background: #fff;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: var(--transition);
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  box-shadow: none;
+  border: 1px solid var(--border);
 }
 
 .part-option:hover {
-  border-color: var(--primary);
-  background: rgba(var(--primary-rgb), 0.12);
+  border-color: rgba(var(--primary-rgb), 0.5);
+  box-shadow: 0 8px 24px rgba(var(--primary-rgb), 0.1);
   transform: translateY(-2px);
 }
 
@@ -416,7 +475,7 @@
 
 .option-price {
   color: var(--primary);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .option-warning {
@@ -442,8 +501,8 @@
 .vendor-suggestion-empty {
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(var(--primary-rgb), 0.12);
-  border: 1px solid rgba(var(--primary-rgb), 0.35);
+  background: rgba(var(--primary-rgb), 0.06);
+  border: 1px solid rgba(var(--primary-rgb), 0.2);
   color: var(--text-primary);
   font-size: 0.9rem;
   display: flex;
@@ -480,24 +539,22 @@
 
 .no-results {
   padding: var(--spacing-md);
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px dashed rgba(245, 158, 11, 0.6);
-  border-radius: 0;
+  background: #fffbeb;
+  border: 1px dashed #fcd34d;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.95rem;
 }
 
+/* —— Responsive —— */
 @media (max-width: 1100px) {
   .configurator-grid {
     grid-template-columns: 1fr;
-    gap: var(--spacing-lg);
-    border: none;
-    background: transparent;
   }
 
-  .compatibility-panel,
-  .filters-panel {
-    border: 1px solid rgba(15, 23, 42, 0.12);
+  .compatibility-panel {
+    position: static;
+    top: auto;
   }
 }
 
@@ -514,18 +571,6 @@
 }
 
 @media (max-width: 768px) {
-  .configurator-grid {
-    grid-template-columns: 1fr;
-    gap: var(--spacing-lg);
-    border: none;
-    background: transparent;
-  }
-
-  .compatibility-panel,
-  .filters-panel {
-    border: 1px solid rgba(15, 23, 42, 0.12);
-  }
-
   .configurator-page {
     padding: calc(var(--spacing-xl) + 1rem) 0;
   }
@@ -535,10 +580,3 @@
     align-items: flex-start;
   }
 }
-
-
-
-
-
-
-
