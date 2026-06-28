@@ -4,6 +4,10 @@
  * Dev: connects same-origin — Vite proxies /socket.io → Flask :5000 (no CORS).
  * Prod: connects to the API base (Railway) which allows the Vercel origin.
  *
+ * Auth: the JWT is sent via the `auth` payload at connect time; the server
+ * resolves the user (and therefore which rooms to join) from that token —
+ * it never trusts a client-supplied user_id/role (see Dashboard/app/realtime.py).
+ *
  * Usage:
  *   import { connectSocket, disconnectSocket, onNotification } from '../realtime/socket';
  *   connectSocket(user);                 // after login
@@ -12,6 +16,7 @@
  */
 import { io } from 'socket.io-client';
 import { LIVE_API_URL } from '../config/deployUrls';
+import { getStoredToken } from '../utils/authStorage';
 
 let socket = null;
 
@@ -32,21 +37,17 @@ export function getSocket() {
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1500,
+      auth: (cb) => cb({ token: getStoredToken() }),
     });
   }
   return socket;
 }
 
-/** Connect (if needed) and join this user's private + role rooms. */
+/** Connect (if needed); the server joins this user's private + role rooms from the JWT. */
 export function connectSocket(user) {
   if (!user?.id) return null;
   const s = getSocket();
-  const join = () => s.emit('join', { user_id: user.id, role: user.role || user.role_name || '' });
-  if (s.connected) join();
-  else {
-    s.once('connect', join);
-    if (!s.active) s.connect();
-  }
+  if (!s.connected && !s.active) s.connect();
   return s;
 }
 

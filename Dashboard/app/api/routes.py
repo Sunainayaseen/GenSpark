@@ -683,6 +683,26 @@ def place_order():
     if not normalized:
         return jsonify({'success': False, 'error': 'Cart has no valid items'}), 400
 
+    # Stock validation — lock each vendor's inventory row so concurrent checkouts
+    # for the same component can't all pass the check (released at commit/rollback below).
+    for it in normalized:
+        if not it['vendor_id']:
+            continue
+        inv = (
+            VendorComponent.query
+            .filter_by(vendor_id=it['vendor_id'], component_id=it['item_id'])
+            .with_for_update()
+            .first()
+        )
+        if not inv or int(inv.quantity or 0) < it['quantity']:
+            db.session.rollback()
+            return jsonify({
+                'success': False,
+                'error': f"Insufficient stock for {it['component_name']}",
+                'code': 'INSUFFICIENT_STOCK',
+                'component_name': it['component_name'],
+            }), 409
+
     # Match React checkout: flat shipping when there is at least one line (see Checkout.jsx).
     SHIPPING_FLAT_PKR = 2000.0
     shipping_fee = float(SHIPPING_FLAT_PKR) if normalized else 0.0
@@ -828,9 +848,20 @@ def admin_approve_order(order_id):
                 unit_price=unit_price,
                 total_price=line_total,
             ))
-            inv = VendorComponent.query.filter_by(vendor_id=vendor_id, component_id=it.item_id).first()
-            if inv:
-                inv.quantity = max(0, int(inv.quantity or 0) - qty)
+            inv = (
+                VendorComponent.query
+                .filter_by(vendor_id=vendor_id, component_id=it.item_id)
+                .with_for_update()
+                .first()
+            )
+            if not inv or int(inv.quantity or 0) < qty:
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': f"Insufficient stock for {it.component_name} (vendor #{vendor_id})",
+                    'code': 'INSUFFICIENT_STOCK',
+                }), 409
+            inv.quantity = int(inv.quantity or 0) - qty
 
         v_order.total_amount = subtotal
         generated_orders.append({

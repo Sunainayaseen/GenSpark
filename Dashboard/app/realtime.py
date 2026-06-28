@@ -5,12 +5,14 @@ Room scheme:
   user:<id>   one private room per logged-in user (customer / rider / admin)
   role:admin  shared room for all admins (dashboard live alerts)
 
-Clients call emit('join', {user_id, role}) right after connecting so each
-notification reaches only the intended recipient. Emit from anywhere via
+Clients authenticate by passing {token} in the socket.io-client `auth` option
+at connect time. Room membership is resolved server-side from that JWT —
+never trusted from client-supplied user_id/role — so one user can't join
+another user's room or the shared admin room. Emit from anywhere via
 emit_to_user() / emit_to_role().
 """
 from flask import request
-from flask_socketio import join_room, leave_room
+from flask_socketio import join_room
 
 from app import socketio
 
@@ -24,32 +26,19 @@ def role_room(role):
 
 
 @socketio.on('connect')
-def _on_connect():
-    # Connection is open; the client will 'join' its rooms next.
+def _on_connect(auth=None):
+    from app.utils.jwt_session_bridge import user_from_bearer_token_string
+
+    token = (auth or {}).get('token') if isinstance(auth, dict) else None
+    user = user_from_bearer_token_string(token) if token else None
+    if not user:
+        return False  # reject the connection — no valid/verifiable token
+
+    join_room(user_room(user.id))
+    role_name = user.role_ref.name if user.role_ref else None
+    if role_name:
+        join_room(role_room(role_name.lower()))
     socketio.emit('connected', {'sid': request.sid}, to=request.sid)
-
-
-@socketio.on('join')
-def _on_join(data):
-    data = data or {}
-    user_id = data.get('user_id')
-    role = (data.get('role') or '').strip().lower()
-    if user_id is not None:
-        join_room(user_room(user_id))
-    if role:
-        join_room(role_room(role))
-    socketio.emit('joined', {'user_id': user_id, 'role': role}, to=request.sid)
-
-
-@socketio.on('leave')
-def _on_leave(data):
-    data = data or {}
-    user_id = data.get('user_id')
-    role = (data.get('role') or '').strip().lower()
-    if user_id is not None:
-        leave_room(user_room(user_id))
-    if role:
-        leave_room(role_room(role))
 
 
 # ---------------------------------------------------------------------------

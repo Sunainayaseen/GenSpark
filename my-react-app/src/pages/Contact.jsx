@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useConfirm } from '../components/ConfirmProvider';
+import { dashboardPost } from '../api/dashboardApi';
 import './Contact.css';
 
 const Contact = () => {
@@ -11,17 +12,27 @@ const Contact = () => {
     subject: '',
     message: '',
   });
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    notify('Thank you for contacting us! We will get back to you soon.', { type: 'success' });
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      subject: '',
-      message: '',
-    });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await dashboardPost('/contact', formData);
+      notify('Thank you for contacting us! We will get back to you soon.', { type: 'success' });
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        subject: '',
+        message: '',
+      });
+    } catch (err) {
+      notify(err?.message || 'Could not send your message. Please try again.', { type: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -206,8 +217,8 @@ const Contact = () => {
                 ></textarea>
               </div>
 
-              <button type="submit" className="btn btn-primary btn-lg submit-btn">
-                Send Message
+              <button type="submit" className="btn btn-primary btn-lg submit-btn" disabled={submitting}>
+                {submitting ? 'Sending…' : 'Send Message'}
               </button>
             </form>
           </div>

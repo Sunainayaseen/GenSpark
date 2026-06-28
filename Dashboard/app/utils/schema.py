@@ -1,7 +1,23 @@
 """Database bootstrap and legacy column migrations (safe on empty Railway MySQL)."""
+import os
+import secrets
+
 from sqlalchemy import text
 
 from app import db
+
+
+def _is_production():
+    return os.getenv('FLASK_ENV', '').strip().lower() == 'production'
+
+
+def _seed_password(default_password):
+    """Dev: use the documented default. Production: generate a random one-time
+    password (logged once) and force a change on first login, so no deploy ever
+    ships with a publicly-known admin123/vendor123 credential."""
+    if not _is_production():
+        return default_password, False
+    return secrets.token_urlsafe(12), True
 
 
 def _table_exists(conn, table_name, dialect_name):
@@ -86,10 +102,15 @@ def ensure_database_schema(flask_app):
             admin_role = Role.query.filter_by(name='admin').first()
             if admin_role:
                 admin = User(name='Admin', email='admin@genspark.com', role_id=admin_role.id)
-                admin.set_password('admin123')
+                password, generated = _seed_password('admin123')
+                admin.set_password(password)
+                admin.must_change_password = generated
                 db.session.add(admin)
                 db.session.commit()
-                print('(GenSpark) Created admin: admin@genspark.com / admin123')
+                if generated:
+                    print(f'(GenSpark) Created admin: admin@genspark.com / {password} — CHANGE ON FIRST LOGIN')
+                else:
+                    print('(GenSpark) Created admin: admin@genspark.com / admin123 (dev default)')
 
         if not User.query.filter_by(email='vendor@genspark.com').first():
             vendor_role = Role.query.filter_by(name='vendor').first()
@@ -99,7 +120,9 @@ def ensure_database_schema(flask_app):
                     email='vendor@genspark.com',
                     role_id=vendor_role.id,
                 )
-                vendor_user.set_password('vendor123')
+                password, generated = _seed_password('vendor123')
+                vendor_user.set_password(password)
+                vendor_user.must_change_password = generated
                 db.session.add(vendor_user)
                 db.session.flush()
                 db.session.add(
@@ -113,7 +136,10 @@ def ensure_database_schema(flask_app):
                     )
                 )
                 db.session.commit()
-                print('(GenSpark) Created vendor: vendor@genspark.com / vendor123')
+                if generated:
+                    print(f'(GenSpark) Created vendor: vendor@genspark.com / {password} — CHANGE ON FIRST LOGIN')
+                else:
+                    print('(GenSpark) Created vendor: vendor@genspark.com / vendor123 (dev default)')
 
 
 def apply_legacy_migrations(flask_app):
