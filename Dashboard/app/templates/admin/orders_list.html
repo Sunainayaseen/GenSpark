@@ -1,0 +1,82 @@
+{% extends "admin/base_admin.html" %}
+{% from 'admin/macros/confirm_modal.html' import shared_confirm_modal, confirm_modal_script %}
+{% block page_title %}Orders{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Orders</li>{% endblock %}
+
+{% block content %}
+{% if orders_pending_approval and orders_pending_approval|length > 0 %}
+<div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between mb-3" style="border-left:4px solid #f0ad4e;" role="status">
+  <div>
+    <strong>Approval required:</strong> {{ orders_pending_approval|length }} order(s) are waiting for you to approve or reject
+    (status <em>Pending</em> = new customer order not yet sent to vendors).
+  </div>
+  <ul class="mb-0 pl-3 mt-2 w-100">
+    {% for o in orders_pending_approval %}
+    <li>
+      <a href="{{ url_for('admin.order_detail', order_id=o.id) }}">Order #{{ o.order_number or o.id }}</a>
+      &mdash; Rs.{{ "%.2f"|format(o.total_amount or 0) }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+    <h3 class="card-title mb-0">All Orders</h3>
+    {% if orders_pending_approval and orders_pending_approval|length > 0 %}
+    <span class="badge badge-warning" style="font-size:0.9rem;">{{ orders_pending_approval|length }} awaiting approval</span>
+    {% endif %}
+  </div>
+  <div class="card-body table-responsive p-0">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr><th>ID</th><th>Order #</th><th>Customer</th><th>Vendor</th><th>Amount</th><th>Status</th><th>Date</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr>
+          <td>{{ o.id }}</td>
+          <td>{{ o.order_number or o.id }}</td>
+          <td>{{ o.customer.name if o.customer else '-' }}</td>
+          <td>{{ o.vendor.shop_name if o.vendor else '-' }}</td>
+          <td>Rs.{{ "%.2f"|format(o.total_amount or 0) }}</td>
+          <td>
+            <span class="badge badge-{% if o.status in ['pending', 'admin-review'] %}warning{% elif o.status == 'accepted' %}info{% elif o.status == 'assembly' %}primary{% elif o.status == 'qa' %}secondary{% else %}success{% endif %}">
+              {{ o.status | status_label }}
+            </span>
+            {% if o.status in ['pending', 'admin-review'] %}
+            <span class="d-block small text-warning mt-1" title="Open order and use Approve &amp; generate vendor orders">Action needed</span>
+            {% endif %}
+          </td>
+          <td>{{ o.created_at.strftime('%d-%m-%Y') if o.created_at else '-' }}</td>
+          <td class="d-flex align-items-center" style="gap: .5rem;">
+            <a href="{{ url_for('admin.order_detail', order_id=o.id) }}" class="btn btn-sm btn-info">View</a>
+            {% if o.status in ['pending', 'admin-review'] %}
+            <form id="form-approve-order-list-{{ o.id }}" method="post" action="{{ url_for('admin.order_approve_generate', order_id=o.id) }}" class="d-none">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            </form>
+            <button type="button"
+              class="btn btn-sm btn-success"
+              data-genspark-confirm-form="form-approve-order-list-{{ o.id }}"
+              data-genspark-confirm-title="Approve order #{{ o.order_number or o.id }}?"
+              data-genspark-confirm-message="Vendor orders will be generated for this customer order."
+              data-genspark-confirm-label="Yes, Approve"
+              data-genspark-confirm-class="btn-success">
+              Approve &amp; generate
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center">No orders.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ shared_confirm_modal() }}
+{% endblock %}
+
+{% block extra_js %}
+{{ confirm_modal_script() }}
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "admin/base_admin.html" %}
+{% block page_title %}Quality Assurance{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">QA</li>{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header"><h3 class="card-title">Orders Pending QA</h3></div>
+  <div class="card-body table-responsive p-0">
+    <table class="table table-hover">
+      <thead>
+        <tr><th>Order ID</th><th>Customer</th><th>Vendor</th><th>Amount</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr>
+          <td>{{ o.id }}</td>
+          <td>{{ o.customer.name if o.customer else '-' }}</td>
+          <td>{{ o.vendor.shop_name if o.vendor else '-' }}</td>
+          <td>Rs.{{ "%.2f"|format(o.total_amount or 0) }}</td>
+          <td><span class="badge badge-{{ 'primary' if o.status == 'assembly' else 'secondary' }}">{{ o.status }}</span></td>
+          <td>
+            <form action="{{ url_for('admin.qa_pass', order_id=o.id) }}" method="post" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-success">Pass</button>
+            </form>
+            <button type="button" class="btn btn-sm btn-danger" data-toggle="modal" data-target="#failModal{{ o.id }}">Fail</button>
+            <div class="modal fade" id="failModal{{ o.id }}" tabindex="-1">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <form method="post" action="{{ url_for('admin.qa_fail', order_id=o.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-header"><h5 class="modal-title">QA Fail - Order #{{ o.id }}</h5><button type="button" class="close" data-dismiss="modal">&times;</button></div>
+                    <div class="modal-body">
+                      <div class="form-group">
+                        <label>Notes (reason for fail)</label>
+                        <textarea name="notes" class="form-control" rows="2"></textarea>
+                      </div>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                      <button type="submit" class="btn btn-danger">Mark Fail</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center">No orders pending QA.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

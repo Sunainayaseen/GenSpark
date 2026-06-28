@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Vendor - GenSpark{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ---- Notification dropdown ---- */
+  .gs-notif-menu { width: 380px; max-width: 92vw; padding: 0; border: none;
+    border-radius: .6rem; box-shadow: 0 12px 32px rgba(0,0,0,.16); overflow: hidden; }
+  .gs-notif-head { display: flex; align-items: center; justify-content: space-between;
+    padding: .75rem 1rem; background: linear-gradient(135deg,#d97706,#b45309); color: #fff; }
+  .gs-notif-head .gs-notif-title { font-weight: 600; font-size: .95rem; }
+  .gs-notif-head .badge { background: rgba(255,255,255,.22); color: #fff; font-weight: 600; }
+  .gs-notif-list { max-height: 60vh; overflow-y: auto; }
+  .gs-notif-item { display: flex; gap: .7rem; align-items: flex-start; padding: .7rem 1rem;
+    white-space: normal; border-bottom: 1px solid #f0f1f4; transition: background .12s ease; position: relative; }
+  .gs-notif-item:hover { background: #fffaf2; }
+  .gs-notif-item.is-unread { background: #fff6e9; }
+  .gs-notif-item.is-unread::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: #d97706; }
+  .gs-notif-ico { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: .9rem; }
+  .gs-notif-body { min-width: 0; flex: 1; }
+  .gs-notif-body .gs-notif-name { font-weight: 600; font-size: .85rem; color: #1f2937; line-height: 1.25; }
+  .gs-notif-body .gs-notif-msg { display: block; font-size: .8rem; color: #6b7280; line-height: 1.3; margin-top: 2px; }
+  .gs-notif-body .gs-notif-time { display: block; font-size: .7rem; color: #9ca3af; margin-top: 4px; }
+  .gs-notif-empty { padding: 2rem 1rem; text-align: center; color: #9ca3af; font-size: .85rem; }
+  .gs-notif-empty i { font-size: 1.6rem; display: block; margin-bottom: .4rem; opacity: .5; }
+  .gs-notif-foot { display: block; text-align: center; padding: .6rem; font-size: .8rem;
+    font-weight: 600; color: #b45309; background: #fafbfc; border-top: 1px solid #f0f1f4; }
+  .gs-notif-foot:hover { background: #fff6e9; text-decoration: none; }
+  .gs-c-green  { background: #e7f7ee; color: #15803d; }
+  .gs-c-blue   { background: #e6efff; color: #2563eb; }
+  .gs-c-amber  { background: #fff3e0; color: #c2660a; }
+  .gs-c-purple { background: #f1ecfe; color: #7c3aed; }
+  .gs-c-teal   { background: #e2f6f3; color: #0f766e; }
+</style>
+{% endblock %}
+
+{% block navbar %}
+<nav class="main-header navbar navbar-expand navbar-white navbar-light">
+  <ul class="navbar-nav">
+    <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
+    <li class="nav-item"><span class="nav-link text-dark font-weight-medium">GenSpark Vendor</span></li>
+  </ul>
+  <ul class="navbar-nav ml-auto">
+    <li class="nav-item dropdown">
+      <a class="nav-link" data-toggle="dropdown" href="#">
+        <i class="far fa-bell"></i>
+        {% if vendor_unread_count and vendor_unread_count > 0 %}
+        <span class="badge badge-warning navbar-badge">{{ vendor_unread_count }}</span>
+        {% endif %}
+      </a>
+      <div class="dropdown-menu dropdown-menu-right gs-notif-menu">
+        <div class="gs-notif-head">
+          <span class="gs-notif-title"><i class="far fa-bell mr-1"></i> Notifications</span>
+          {% if vendor_unread_count and vendor_unread_count > 0 %}
+          <span class="badge badge-pill">{{ vendor_unread_count }} new</span>
+          {% endif %}
+        </div>
+        <div class="gs-notif-list">
+        {% for n in vendor_notifications %}
+          {% set t = (n.title or '') | lower %}
+          {% if 'deliver' in t %}{% set ico = 'fa-box-open' %}{% set col = 'gs-c-green' %}
+          {% elif 'pickup' in t or 'rider' in t %}{% set ico = 'fa-motorcycle' %}{% set col = 'gs-c-blue' %}
+          {% elif 'proof' in t or 'verify' in t %}{% set ico = 'fa-camera' %}{% set col = 'gs-c-amber' %}
+          {% elif 'payment' in t or 'paid' in t %}{% set ico = 'fa-rupee-sign' %}{% set col = 'gs-c-teal' %}
+          {% elif 'order' in t or 'approve' in t %}{% set ico = 'fa-file-invoice' %}{% set col = 'gs-c-purple' %}
+          {% else %}{% set ico = 'fa-bell' %}{% set col = 'gs-c-blue' %}{% endif %}
+          <a href="{{ url_for('vendor.orders_list') }}" class="gs-notif-item {% if not n.is_read %}is-unread{% endif %}">
+            <span class="gs-notif-ico {{ col }}"><i class="fas {{ ico }}"></i></span>
+            <span class="gs-notif-body">
+              <span class="gs-notif-name">{{ n.title }}</span>
+              <span class="gs-notif-msg">{{ n.message }}</span>
+              <span class="gs-notif-time"><i class="far fa-clock mr-1"></i>{{ n.created_at.strftime('%d %b, %H:%M') if n.created_at else '' }}</span>
+            </span>
+          </a>
+        {% else %}
+          <div class="gs-notif-empty"><i class="far fa-bell-slash"></i>No notifications yet</div>
+        {% endfor %}
+        </div>
+        <a href="{{ url_for('vendor.notifications_read_all') }}" class="gs-notif-foot"><i class="fas fa-check-double mr-1"></i> Mark all as read</a>
+      </div>
+    </li>
+    <li class="nav-item"><span class="nav-link"><i class="fas fa-store mr-1 text-muted"></i> {{ current_user.name }}</span></li>
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt mr-1"></i> Logout</a></li>
+  </ul>
+</nav>
+{% endblock %}
+
+{% block sidebar %}
+<aside class="main-sidebar sidebar-dark-primary elevation-4">
+  <a href="{{ url_for('vendor.dashboard') }}" class="brand-link">
+    <img src="{{ url_for('static', filename='img/genspark-gs-circuit-logo.png') }}" alt="GenSpark" class="brand-image gs-brand-icon">
+    <span class="brand-text font-weight-light">GenSpark Vendor</span>
+  </a>
+  <div class="sidebar">
+    <nav class="mt-2">
+      <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+        <li class="nav-item">
+          <a href="{{ url_for('vendor.dashboard') }}" class="nav-link">
+            <i class="nav-icon fas fa-tachometer-alt"></i>
+            <p>Dashboard</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{{ url_for('vendor.profile') }}" class="nav-link">
+            <i class="nav-icon fas fa-store"></i>
+            <p>My Profile</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{{ url_for('vendor.inventory') }}" class="nav-link">
+            <i class="nav-icon fas fa-boxes"></i>
+            <p>Inventory</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{{ url_for('vendor.orders_list') }}" class="nav-link">
+            <i class="nav-icon fas fa-shopping-cart"></i>
+            <p>Orders</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{{ url_for('vendor.assembly_list') }}" class="nav-link">
+            <i class="nav-icon fas fa-tools"></i>
+            <p>Assembly</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{{ url_for('vendor.shipment_list') }}" class="nav-link">
+            <i class="nav-icon fas fa-truck"></i>
+            <p>Shipment</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{{ url_for('vendor.earnings') }}" class="nav-link">
+            <i class="nav-icon fas fa-rupee-sign"></i>
+            <p>Earnings</p>
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </div>
+</aside>
+{% endblock %}
+
+{% block content_header %}
+<div class="row mb-2">
+  <div class="col-sm-6">
+    <h1 class="m-0">{% block page_title %}Vendor{% endblock %}</h1>
+  </div>
+  <div class="col-sm-6">
+    <ol class="breadcrumb float-sm-right mb-0">
+      <li class="breadcrumb-item"><a href="{{ url_for('vendor.dashboard') }}">Vendor</a></li>
+      {% block breadcrumb %}{% endblock %}
+    </ol>
+  </div>
+</div>
+{% endblock %}

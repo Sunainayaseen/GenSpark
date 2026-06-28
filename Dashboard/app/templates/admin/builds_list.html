@@ -1,0 +1,33 @@
+{% extends "admin/base_admin.html" %}
+{% block page_title %}PC Builds{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Builds</li>{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">Predefined PC Builds</h3>
+    <a href="{{ url_for('admin.build_add') }}" class="btn btn-sm btn-primary float-right">Add Build</a>
+  </div>
+  <div class="card-body table-responsive p-0">
+    <table class="table table-hover">
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Type</th><th>Total Price</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for b in builds %}
+        <tr>
+          <td>{{ b.id }}</td>
+          <td>{{ b.name }}</td>
+          <td><span class="badge badge-info">{{ b.build_type or '-' }}</span></td>
+          <td>Rs.{{ "%.2f"|format(b.total_price or 0) }}</td>
+          <td><span class="badge badge-{{ 'success' if b.is_active else 'secondary' }}">{{ 'Active' if b.is_active else 'Inactive' }}</span></td>
+          <td><a href="{{ url_for('admin.build_edit', build_id=b.id) }}" class="btn btn-sm btn-info">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center">No builds.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

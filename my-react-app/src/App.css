@@ -1,0 +1,62 @@
+/* App-specific styles */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: clip;
+  max-width: 100%;
+  min-width: 0;
+  background: var(--bg-primary);
+}
+
+/* Lightweight route load indicator (AI Assistant chunk only, usually) */
+.route-loading {
+  position: relative;
+  min-height: 4px;
+  width: 100%;
+}
+
+.route-loading-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--primary) 35%,
+    var(--primary-dark) 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: route-loading-slide 0.85s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.35);
+}
+
+@keyframes route-loading-slide {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.main-content {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex: 1;
+  overflow-x: clip;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+/* Nav click feedback */
+.nav a.nav-pending,
+.nav .nav-pending {
+  opacity: 0.72;
+  pointer-events: none;
+}

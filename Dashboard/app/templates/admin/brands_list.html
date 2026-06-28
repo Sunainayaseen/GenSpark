@@ -1,0 +1,30 @@
+{% extends "admin/base_admin.html" %}
+{% block page_title %}Brands{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Brands</li>{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">Component Brands</h3>
+    <a href="{{ url_for('admin.brand_add') }}" class="btn btn-sm btn-primary float-right">Add Brand</a>
+  </div>
+  <div class="card-body table-responsive p-0">
+    <table class="table table-hover">
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for b in brands %}
+        <tr>
+          <td>{{ b.id }}</td>
+          <td>{{ b.name }}</td>
+          <td><a href="{{ url_for('admin.brand_edit', brand_id=b.id) }}" class="btn btn-sm btn-info">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="text-center">No brands. <a href="{{ url_for('admin.brand_add') }}">Add one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

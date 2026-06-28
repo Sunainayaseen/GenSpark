@@ -1,0 +1,52 @@
+{% extends "admin/base_admin.html" %}
+{% block page_title %}Reports & Analytics{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">Reports</li>{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-12">
+    <div class="card card-primary card-outline">
+      <div class="card-header"><h3 class="card-title">Revenue</h3></div>
+      <div class="card-body">
+        <h4>Total Revenue (Shipped/Delivered): Rs.{{ "%.2f"|format(total_revenue) }}</h4>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Orders by Status</h3></div>
+      <div class="card-body table-responsive p-0">
+        <table class="table table-sm">
+          <thead><tr><th>Status</th><th>Count</th></tr></thead>
+          <tbody>
+            {% for status, cnt in orders_by_status %}
+            <tr><td>{{ status }}</td><td>{{ cnt }}</td></tr>
+            {% else %}
+            <tr><td colspan="2">No data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Top Vendors (Order Count)</h3></div>
+      <div class="card-body table-responsive p-0">
+        <table class="table table-sm">
+          <thead><tr><th>Vendor</th><th>Orders</th></tr></thead>
+          <tbody>
+            {% for shop_name, cnt in top_vendors %}
+            <tr><td>{{ shop_name }}</td><td>{{ cnt }}</td></tr>
+            {% else %}
+            <tr><td colspan="2">No data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

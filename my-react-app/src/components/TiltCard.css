@@ -1,0 +1,11 @@
+.tilt-card {
+  position: relative;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce), (pointer: coarse) {
+  .tilt-card {
+    transform: none !important;
+  }
+}

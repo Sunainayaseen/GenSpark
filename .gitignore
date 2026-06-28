@@ -1,0 +1,35 @@
+# Virtual environments (never commit — they exceed GitHub file-size limits)
+.venv/
+venv/
+myvenv/
+myvenv64/
+**/.venv/
+**/site-packages/
+
+# Python caches / artifacts
+__pycache__/
+*.pyc
+*.pyo
+runs/
+
+# Secrets / local config (do NOT commit credentials)
+.env
+*.env
+!.env.example
+
+# Node / build output
+node_modules/
+dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+Dashboard/logs/*.log
+
+# AI assistant local config — not part of the project
+.claude/
+
+# Database dumps / live DB files — contain real user PII and password hashes
+genspark_erp.sql
+instance/
+**/instance/

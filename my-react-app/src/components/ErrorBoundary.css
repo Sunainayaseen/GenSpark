@@ -1,0 +1,27 @@
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: var(--spacing-lg, 2rem);
+}
+
+.error-boundary-card {
+  max-width: 28rem;
+  text-align: center;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 28px var(--shadow);
+  padding: 2.5rem 2rem;
+}
+
+.error-boundary-card h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+  color: var(--text-primary);
+}
+
+.error-boundary-card p {
+  margin: 0 0 1.5rem;
+  color: var(--text-secondary);
+}

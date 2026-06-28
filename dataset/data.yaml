@@ -1,0 +1,17 @@
+# GenSpark component detector — YOLOv8 dataset config
+# Folder layout (do NOT use train/images — labels live in labels/train):
+#   dataset/images/train  +  dataset/labels/train
+#   dataset/images/val    +  dataset/labels/val
+
+path: C:/Users/MMT/Desktop/GenSpark/dataset
+train: images/train
+val: images/val
+
+nc: 4
+
+# Class IDs MUST match vendor dashboard/app/api/routes.py (_component_name)
+names:
+  0: mouse
+  1: keyboard
+  2: monitor
+  3: ram

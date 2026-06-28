@@ -1,0 +1,38 @@
+.stripe-verify-page {
+  padding: 2rem 1rem;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.stripe-verify-muted {
+  color: var(--text-secondary, #666);
+  margin-bottom: 1.5rem;
+}
+
+.stripe-verify-card {
+  padding: 1.25rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius-md, 8px);
+  background: rgba(var(--primary-rgb, 59, 130, 246), 0.05);
+}
+
+.stripe-verify-card p {
+  margin: 0 0 0.75rem;
+}
+
+.stripe-verify-card .btn {
+  margin-top: 0.5rem;
+}
+
+.stripe-verify-result {
+  margin-top: 1rem;
+  font-weight: 600;
+}
+
+.stripe-verify-result.is-ok {
+  color: var(--success, #15803d);
+}
+
+.stripe-verify-result.is-error {
+  color: var(--error, #b91c1c);
+}

@@ -1,0 +1,164 @@
+/* ============================================================
+   ConfirmProvider — app-wide confirm modal + toast notifications
+   Replaces native window.confirm / window.alert.
+   ============================================================ */
+
+.gs-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
+  animation: gs-confirm-fade 0.15s ease;
+}
+
+.gs-confirm-dialog {
+  width: 100%;
+  max-width: 26rem;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.28),
+    0 2px 8px rgba(15, 23, 42, 0.12);
+  padding: 1.5rem 1.5rem 1.25rem;
+  animation: gs-confirm-pop 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gs-confirm-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary, #0f172a);
+}
+
+.gs-confirm-message {
+  margin: 0 0 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary, #475569);
+}
+
+.gs-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.gs-confirm-btn {
+  min-width: 6rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.gs-confirm-btn:active {
+  transform: translateY(1px);
+}
+
+.gs-confirm-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 11, 92, 173), 0.35);
+}
+
+.gs-confirm-btn--ghost {
+  background: #fff;
+  border-color: #d8dee9;
+  color: var(--text-primary, #334155);
+}
+
+.gs-confirm-btn--ghost:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.gs-confirm-btn--primary {
+  background: linear-gradient(135deg, var(--primary, #0b5cad) 0%, var(--primary-dark, #084a8c) 100%);
+  color: #fff;
+}
+
+.gs-confirm-btn--primary:hover {
+  box-shadow: 0 6px 16px rgba(var(--primary-rgb, 11, 92, 173), 0.4);
+}
+
+.gs-confirm-btn--danger {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff;
+}
+
+.gs-confirm-btn--danger:hover {
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.4);
+}
+
+/* ---- Toasts (window.alert replacement) ---- */
+.gs-toast-stack {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 4100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(92vw, 24rem);
+  pointer-events: none;
+}
+
+.gs-toast {
+  pointer-events: auto;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #fff;
+  background: #1e293b;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.25);
+  border-left: 4px solid #64748b;
+  animation: gs-toast-in 0.2s ease;
+}
+
+.gs-toast--success {
+  background: #065f46;
+  border-left-color: #34d399;
+}
+
+.gs-toast--error {
+  background: #7f1d1d;
+  border-left-color: #f87171;
+}
+
+.gs-toast--info {
+  background: #1e293b;
+  border-left-color: #60a5fa;
+}
+
+@keyframes gs-confirm-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes gs-confirm-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes gs-toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-confirm-overlay,
+  .gs-confirm-dialog,
+  .gs-toast {
+    animation: none;
+  }
+}
