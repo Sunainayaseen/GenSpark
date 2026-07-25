@@ -88,7 +88,8 @@ def ensure_database_schema(flask_app):
                 ('Motherboard', 'motherboard'),
                 ('Storage', 'storage'),
                 ('PSU', 'psu'),
-                ('Cabinet', 'cabinet'),
+                ('Case', 'case'),
+                ('Cooling', 'cooling'),
                 ('Mouse', 'mouse'),
                 ('Keyboard', 'keyboard'),
                 ('Monitor', 'monitor'),
@@ -228,3 +229,61 @@ def apply_legacy_migrations(flask_app):
                             conn.commit()
                     except Exception as e:
                         print(f'Note: delivery_assignments.{col} migration skipped:', e)
+
+            # notifications.user_id — index + NOT NULL (only if no pre-existing
+            # NULL rows would violate it; those are orphaned/unreachable anyway,
+            # but we never destructively alter data we haven't verified is safe).
+            if _table_exists(conn, 'notifications', dialect):
+                try:
+                    null_count = conn.execute(text(
+                        "SELECT COUNT(*) FROM notifications WHERE user_id IS NULL"
+                    )).scalar()
+                    if null_count:
+                        print(f'Note: notifications.user_id has {null_count} NULL row(s) — '
+                              'skipping NOT NULL migration until they are cleaned up')
+                    elif dialect == 'mysql':
+                        conn.execute(text("ALTER TABLE notifications MODIFY user_id INT NOT NULL"))
+                        conn.commit()
+                except Exception as e:
+                    print('Note: notifications.user_id NOT NULL migration skipped:', e)
+
+                try:
+                    if dialect == 'mysql':
+                        has_index = conn.execute(text(
+                            "SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
+                            "AND TABLE_NAME = 'notifications' AND INDEX_NAME = 'ix_notifications_user_id'"
+                        )).first()
+                        if not has_index:
+                            conn.execute(text(
+                                "ALTER TABLE notifications ADD INDEX ix_notifications_user_id (user_id)"
+                            ))
+                            conn.commit()
+                except Exception as e:
+                    print('Note: notifications.user_id index migration skipped:', e)
+
+            # vendors.user_id / riders.user_id — unique constraint (one profile per
+            # user). Only applied if no duplicates already exist on this DB.
+            for table, label in (('vendors', 'vendors.user_id'), ('riders', 'riders.user_id')):
+                if not _table_exists(conn, table, dialect):
+                    continue
+                try:
+                    if dialect == 'mysql':
+                        has_constraint = conn.execute(text(
+                            "SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
+                            f"AND TABLE_NAME = '{table}' AND INDEX_NAME = 'uq_{table}_user_id'"
+                        )).first()
+                        if has_constraint:
+                            continue
+                    dupe = conn.execute(text(
+                        f"SELECT user_id FROM {table} GROUP BY user_id HAVING COUNT(*) > 1 LIMIT 1"
+                    )).first()
+                    if dupe:
+                        print(f'Note: {label} has duplicate values — skipping unique '
+                              'constraint migration until they are cleaned up')
+                    elif dialect == 'mysql':
+                        conn.execute(text(
+                            f"ALTER TABLE {table} ADD CONSTRAINT uq_{table}_user_id UNIQUE (user_id)"
+                        ))
+                        conn.commit()
+                except Exception as e:
+                    print(f'Note: {label} unique-constraint migration skipped:', e)

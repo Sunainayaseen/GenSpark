@@ -40,7 +40,8 @@ def main():
     print(f'BASE build (score {rec.get("compatibility_score")}):',
           {k: v for k, v in build.items()})
 
-    # Candidate IDs: filtered options (no incompatible parts) + unfiltered for the ❌ case.
+    # Candidate IDs: build-scoped options (every part returned, each status-marked
+    # ok/adjust/incompatible — nothing is hidden) + the unscoped catalog for the ❌ case.
     _, filt = call('/build-options', {'build': build})
     fo = filt['options']
     _, unfilt = call('/build-options', None, method='GET')
@@ -49,7 +50,7 @@ def main():
     ram32 = find(fo, 'ram', '32GB DDR5')
     ram64 = find(fo, 'ram', '64GB')
     gpu4090 = find(fo, 'gpu', 'RTX 4090')
-    ram_ddr4 = find(uo, 'ram', 'DDR4')          # hidden by the filtered dropdown
+    ram_ddr4 = find(uo, 'ram', 'DDR4')          # also present in fo['ram'], just marked incompatible
 
     def verdict(slot, cid, label, purpose='Gaming'):
         _, j = call('/evaluate-customization',
@@ -69,9 +70,11 @@ def main():
     if ram_ddr4:
         verdict('ram', ram_ddr4, '❌ DDR4 stick on AM5 board')
 
-    print('\n=== Dropdown integrity (no incompatible parts) ===')
-    ddr4_in_filtered = [o['name'] for o in fo['ram'] if 'DDR4' in o['name']]
-    print(f'  DDR4 sticks offered on the AM5 board: {len(ddr4_in_filtered)} (expect 0)')
+    print('\n=== Dropdown integrity (incompatible parts shown, marked — not hidden) ===')
+    ddr4_in_filtered = [o for o in fo['ram'] if 'DDR4' in o['name']]
+    mismarked = [o['name'] for o in ddr4_in_filtered if o.get('status') != 'incompatible']
+    print(f'  DDR4 sticks offered on the AM5 board: {len(ddr4_in_filtered)} '
+          f'(expect > 0, all status=incompatible: {"OK" if not mismarked else "FAIL " + str(mismarked)})')
 
     print('\n=== Defensive handling ===')
     print('  missing component_id ->', call('/evaluate-customization',

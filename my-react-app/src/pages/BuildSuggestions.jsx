@@ -16,10 +16,6 @@ const BuildSuggestions = () => {
   const navigate = useNavigate();
   const { setSelectedBuild } = useApp();
 
-  const handlePrebuiltCardClick = (itemId) => {
-    navigate(`/builds/prebuilt/${itemId}`);
-  };
-
   const handlePrebuiltConfigure = (e, item) => {
     e.stopPropagation();
     setSelectedBuild(prebuiltToConfiguratorBuild(item));
@@ -46,16 +42,7 @@ const BuildSuggestions = () => {
             {PREBUILT_SHOWCASE.map((item) => (
               <div
                 key={item.id}
-                role="button"
-                tabIndex={0}
                 className={`build-card-popular ${item.cardClass}`}
-                onClick={() => handlePrebuiltCardClick(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handlePrebuiltCardClick(item.id);
-                  }
-                }}
               >
                 <div className="build-card-accent" aria-hidden="true" />
                 <div className="build-card-top">

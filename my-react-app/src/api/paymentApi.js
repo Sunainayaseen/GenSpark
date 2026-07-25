@@ -1,5 +1,6 @@
 /**
  * Stripe checkout pipeline — Flask /api/create-payment-intent + /api/order/complete-checkout
+ * (server also finalizes orders independently via /api/webhooks/stripe)
  */
 import axios from 'axios';
 import { getApiPrefix } from '../utils/flaskBase';
@@ -17,8 +18,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-export async function createPaymentIntent(amount) {
-  const { data } = await api.post(`${getApiPrefix()}/create-payment-intent`, { amount });
+export async function createPaymentIntent({ items, shippingAddress, shippingFee }) {
+  const { data } = await api.post(`${getApiPrefix()}/create-payment-intent`, {
+    items,
+    shipping_address: shippingAddress,
+    shipping_fee: shippingFee,
+  });
   return data;
 }
 

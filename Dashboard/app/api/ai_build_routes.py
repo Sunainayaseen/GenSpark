@@ -428,17 +428,46 @@ def _required_psu_watts(selected):
     return 550  # entry/mid GPUs (RTX 4060, 3050, GTX 1660, etc.)
 
 
+def _psu_rating_ok(psu):
+    """True when the PSU meets the validator's 80+ Bronze minimum. Reads the
+    compatibility engine's own rating table so the two can never drift apart."""
+    try:
+        from app.services.compatibility import (
+            specs_for, _RATING_RANK, _MIN_PSU_RATING_RANK,
+        )
+    except Exception:                                          # pragma: no cover
+        return True
+    rating = (specs_for(psu, 'psu').get('rating') or '').lower()
+    return _RATING_RANK.get(rating, 0) >= _MIN_PSU_RATING_RANK
+
+
+def _cpu_can_display(cpu):
+    """True when the CPU can drive a display with no discrete GPU. Reads the
+    validator's derived specs so it matches the 'Display output' rule exactly."""
+    try:
+        from app.services.compatibility import specs_for
+        return bool(specs_for(cpu, 'cpu').get('igpu'))
+    except Exception:                                          # pragma: no cover
+        return _cpu_has_igpu(getattr(cpu, 'name', ''))
+
+
 def _enforce_psu_adequacy(selected, psu_cands):
-    """Swap the PSU up to the cheapest one that can actually power the GPU, so the
-    recommended build is compatibility-valid. Runs last (after fit/upgrade) so nothing
-    downgrades the PSU back below the GPU's requirement."""
+    """Swap the PSU up to the cheapest one that can actually power the GPU *and* meets
+    the 80+ Bronze efficiency minimum, so the recommended build is compatibility-valid.
+    Runs last (after fit/upgrade) so nothing downgrades the PSU back.
+
+    The efficiency rule applies to every build — including iGPU/office builds with no
+    discrete GPU — so this no longer returns early when the wattage requirement is 0
+    (that early return is why office builds kept an unrated OEM PSU)."""
     req = _required_psu_watts(selected)
-    if not req:
-        return
+
+    def acceptable(p):
+        return _psu_watts(p) >= req and _psu_rating_ok(p)
+
     cur = selected.get('PSU')
-    if cur is not None and _psu_watts(cur) >= req:
+    if cur is not None and acceptable(cur):
         return
-    ok = [p for p in (psu_cands or []) if _psu_watts(p) >= req]
+    ok = [p for p in (psu_cands or []) if acceptable(p)]
     if ok:
         selected['PSU'] = min(ok, key=lambda c: float(c.price or 0))
 
@@ -482,6 +511,11 @@ def _select_components(Component, ComponentCategory, purpose, budget_num):
 
     best = None  # (rank_key, selected_dict)
     for cpu in cpu_cands:
+        # This build has no discrete-GPU budget (e.g. office), so the CPU must be able
+        # to drive a display on its own — otherwise the validator rejects the build on
+        # "Display output". The guard further down only covers the has-GPU path.
+        if not gpu_all and not _cpu_can_display(cpu):
+            continue
         platform = _cpu_platform(cpu.name)
         if platform:
             mobo_c = [m for m in mobo_all if _mobo_platform(m.name) == platform]
@@ -696,6 +730,193 @@ def _alt_lookup(Component, ComponentCategory):
     return lookup
 
 
+def _vendor_stock_ids(vendor_id):
+    """Component ids this vendor currently has in stock (quantity > 0)."""
+    from app.models import VendorComponent
+    rows = (
+        VendorComponent.query
+        .filter(VendorComponent.vendor_id == vendor_id, VendorComponent.quantity > 0)
+        .all()
+    )
+    return {int(r.component_id) for r in rows}
+
+
+def _repair_build_for_single_vendor(Component, ComponentCategory, selected, budget_num):
+    """Vendor-aware repair pass — runs AFTER the normal recommendation.
+
+    The selector optimises price + compatibility only, so it can pick parts that no
+    single vendor stocks. Assembly is performed by the supplying vendor, so such a
+    build can never be bought (cart add-build returns VENDOR_CONFLICT). This pass
+    leaves the build untouched when a vendor already covers it; otherwise it
+    re-sources ONLY the uncovered slots from one vendor's own inventory, keeping
+    every compatibility rule and never exceeding the user's budget.
+
+    Returns (build, info). `build` is the original object when no repair was needed
+    or none was possible; info['applied'] reports whether a swap was made.
+    """
+    info = {'attempted': False, 'applied': False, 'vendor_id': None, 'swaps': [], 'reason': None}
+    if not selected:
+        return selected, info
+    try:
+        from app.services.vendor_coverage import vendor_coverage_for_components
+        from app.services.compatibility import validate_build
+    except Exception as _e:                                    # pragma: no cover
+        info['reason'] = f'repair skipped: {_e}'
+        return selected, info
+
+    def total_of(build):
+        return sum(float(c.price or 0) for c in build.values() if c is not None)
+
+    required = {c.id: 1 for c in selected.values() if getattr(c, 'id', None)}
+    if not required:
+        return selected, info
+
+    budget = float(budget_num or 0)
+    coverage = vendor_coverage_for_components(required)
+    # Two independent defects can reach here: no single vendor covers the build, and/or
+    # the selector overshot the budget. Only skip when neither applies.
+    started_over_budget = bool(budget) and total_of(selected) > budget
+    if coverage.get('covers_all') and not started_over_budget:
+        return selected, info          # already purchasable from a single vendor
+
+    info['attempted'] = True
+    cand_cache: dict = {}
+
+    def slot_pool(slot):
+        if slot not in cand_cache:
+            try:
+                cand_cache[slot] = _slot_candidates(Component, ComponentCategory, slot)
+            except KeyError:
+                cand_cache[slot] = []
+        return cand_cache[slot]
+
+    # Vendors are already ordered best-coverage-first; the first that yields a
+    # compatible, in-budget, fully-covered build wins.
+    for vendor in (coverage.get('vendors') or [])[:5]:
+        stock = _vendor_stock_ids(vendor['id'])
+        trial = dict(selected)
+        missing = [s for s, c in trial.items() if c is not None and c.id not in stock]
+        # A vendor that already covers everything is still worth visiting when the
+        # build is over budget — the trim below runs against its stock.
+        if not missing and not started_over_budget:
+            continue
+
+        repaired, swaps = True, []
+        for slot in missing:
+            current = trial[slot]
+            current_price = float(current.price or 0)
+            pool = [c for c in slot_pool(slot) if c.id in stock and c.id != current.id]
+            if not pool:
+                repaired = False
+                break
+
+            # Over budget already -> claw money back (cheapest first). Otherwise keep
+            # value: nearest at-or-below current price, then nearest higher.
+            if budget and total_of(trial) > budget:
+                order = sorted(pool, key=lambda c: float(c.price or 0))
+            else:
+                at_or_below = sorted(
+                    [c for c in pool if float(c.price or 0) <= current_price],
+                    key=lambda c: float(c.price or 0), reverse=True,
+                )
+                higher = sorted(
+                    [c for c in pool if float(c.price or 0) > current_price],
+                    key=lambda c: float(c.price or 0),
+                )
+                order = at_or_below + higher
+
+            chosen = None
+            for cand in order[:14]:
+                trial[slot] = cand
+                if budget and not started_over_budget and total_of(trial) > budget:
+                    continue
+                verdict = validate_build(trial)
+                if verdict and verdict.get('compatible'):
+                    chosen = cand
+                    break
+            if chosen is None:
+                trial[slot] = current
+                repaired = False
+                break
+            swaps.append({
+                'slot': slot, 'from': current.name, 'to': chosen.name,
+                'price_delta': round(float(chosen.price or 0) - current_price, 2),
+            })
+
+        if not repaired:
+            continue
+
+        # Coverage is fixed but the selector may still have overshot the budget. Trim
+        # within the SAME vendor's stock (the selector's own _fit_to_budget step,
+        # vendor-constrained) so coverage is preserved and the build is never returned
+        # above the customer's budget.
+        if budget and total_of(trial) > budget:
+            for _ in range(10):
+                excess = total_of(trial) - budget
+                if excess <= 0:
+                    break
+                options = []                           # (saving, slot, candidate)
+                for slot, current in list(trial.items()):
+                    if current is None:
+                        continue
+                    current_price = float(current.price or 0)
+                    # Nearest-cheaper first: small, targeted downgrades before drastic ones.
+                    cheaper = sorted(
+                        [c for c in slot_pool(slot)
+                         if c.id in stock and float(c.price or 0) < current_price],
+                        key=lambda c: float(c.price or 0), reverse=True,
+                    )[:6]
+                    for cand in cheaper:
+                        trial[slot] = cand
+                        verdict = validate_build(trial)
+                        trial[slot] = current
+                        if verdict and verdict.get('compatible'):
+                            options.append((current_price - float(cand.price or 0), slot, cand))
+                if not options:
+                    break
+                # Smallest downgrade that clears the overspend; otherwise the biggest
+                # step toward it. Keeps as much of the customer's budget working as
+                # possible instead of gutting the GPU to hit the number.
+                enough = [o for o in options if o[0] >= excess]
+                _, slot, cand = (min(enough, key=lambda o: o[0]) if enough
+                                 else max(options, key=lambda o: o[0]))
+                previous = trial[slot]
+                swaps.append({
+                    'slot': slot, 'from': previous.name, 'to': cand.name,
+                    'price_delta': round(float(cand.price or 0) - float(previous.price or 0), 2),
+                })
+                trial[slot] = cand
+
+        # Final gate: one vendor covers everything, budget respected, still compatible.
+        final_cov = vendor_coverage_for_components(
+            {c.id: 1 for c in trial.values() if getattr(c, 'id', None)}
+        )
+        if not final_cov.get('covers_all'):
+            continue
+        if budget and total_of(trial) > budget:
+            continue
+        verdict = validate_build(trial)
+        if not (verdict and verdict.get('compatible')):
+            continue
+
+        info.update({'applied': True, 'vendor_id': vendor['id'], 'swaps': swaps})
+        return trial, info
+
+    # Report the real blocker: an already-incompatible build can never be repaired, and
+    # saying "within budget" there would send the customer chasing the wrong problem.
+    base_verdict = validate_build(selected) or {}
+    if not base_verdict.get('compatible'):
+        info['reason'] = (
+            'The generated build is not hardware-compatible, so it could not be '
+            'sourced from a single vendor.'
+        )
+    elif budget:
+        info['reason'] = 'No purchasable build available within budget.'
+    else:
+        info['reason'] = 'No single approved vendor can supply every component of this build.'
+    return selected, info
+
+
 def _recommend_from_catalog(purpose, budget):
     """Build a recommendation from in-stock DB components. None if catalog is empty."""
     try:
@@ -711,6 +932,18 @@ def _recommend_from_catalog(purpose, budget):
     if not selected or 'CPU' not in selected:
         return None
 
+    # Vendor-aware repair: the selector above optimises price + compatibility only, so
+    # it can produce a build no single vendor stocks — which the customer could never
+    # buy. Re-source just the uncovered slots from one vendor's inventory (all
+    # compatibility rules and the budget still enforced) before anything downstream.
+    try:
+        selected, vendor_repair = _repair_build_for_single_vendor(
+            Component, ComponentCategory, selected, budget_num
+        )
+    except Exception as _e:
+        print('vendor repair skipped:', _e)
+        vendor_repair = {'attempted': False, 'applied': False, 'reason': str(_e)}
+
     # Deterministic, rule-based compatibility proof over the selected parts. The
     # recommender already guarantees a coherent build, so this validates clean; it
     # gives the customer the explicit pass/fail/score contract (and is the gate the
@@ -721,6 +954,17 @@ def _recommend_from_catalog(purpose, budget):
     except Exception as _e:
         print('compatibility validation skipped:', _e)
         compatibility = None
+
+    # Single-vendor-per-build: assembly is performed by the supplying vendor, so the
+    # recommended build must come from one vendor — surfaced here for the build
+    # summary (`vendor`) and to flag it up front if no vendor stocks everything.
+    try:
+        from app.services.vendor_coverage import check_build_vendor_consistency
+        vendor_check, best_vendor = check_build_vendor_consistency(selected)
+        vendor_conflict = vendor_check['status'] == 'fail'
+    except Exception as _e:
+        print('vendor consistency check skipped:', _e)
+        best_vendor, vendor_conflict = None, False
 
     is_office = 'office' in (purpose or '').lower()
     markdown, parts, comps, total, intel = _format_db_recommendation(
@@ -746,6 +990,15 @@ def _recommend_from_catalog(purpose, budget):
         # checks[], failures[], warnings[]} — proves the build by rule, not by LLM.
         'compatibility': compatibility,
         'compatibility_score': (compatibility or {}).get('score'),
+        # Single vendor that supplies the whole build (None if no vendor covers
+        # every part) — assembly is done by this vendor, shown in the build summary.
+        'vendor': best_vendor,
+        'vendor_conflict': vendor_conflict,
+        # Additive: outcome of the vendor-aware repair pass (existing keys unchanged).
+        'vendor_repair': vendor_repair,
+        # Set only when no single approved vendor can supply the build, so the client
+        # can explain *why* instead of offering an unpurchasable recommendation.
+        'vendor_message': (vendor_repair or {}).get('reason') if vendor_conflict else None,
     }
 
 
@@ -1057,6 +1310,21 @@ def api_build_options():
     from app.services.compatibility import specs_for
     from app.services.customization import _ADJUSTABLE_RULES
     from app.services import build_intelligence as bi
+    from app.services.vendor_coverage import check_build_vendor_consistency, is_build_component
+
+    # Single-vendor-per-build: resolve the vendor the CURRENT build is locked to (if
+    # any), so candidates not stocked by that vendor show as incompatible too —
+    # reuses the dropdown's existing ✗ marker, no new frontend status needed.
+    vendor_check, locked_vendor = check_build_vendor_consistency(build)
+    vendor_conflict = vendor_check['status'] == 'fail'
+    locked_vendor_covered_ids = set()
+    if locked_vendor:
+        from app.models import VendorComponent
+        locked_vendor_covered_ids = {
+            row.component_id for row in
+            VendorComponent.query.filter_by(vendor_id=locked_vendor['id'])
+            .filter(VendorComponent.quantity > 0).all()
+        }
 
     def card_status(slot, candidate):
         """(status, note): status ∈ 'ok'|'adjust'|'incompatible'; note is a short
@@ -1073,6 +1341,9 @@ def api_build_options():
         adj = [r for r in fails if r in _ADJUSTABLE_RULES]
         if adj:
             return 'adjust', _RULE_NOTE.get(adj[0], 'Needs adjustment')
+        if (locked_vendor and is_build_component(candidate)
+                and candidate.id not in locked_vendor_covered_ids):
+            return 'incompatible', f"Not available from {locked_vendor['shop_name']}"
         return 'ok', 'Compatible'
 
     out = {}
@@ -1093,7 +1364,10 @@ def api_build_options():
                 'status': status, 'note': note,
             })
         out[_REC_SLOT_KEY[slot]] = cards
-    return jsonify({'success': True, 'options': out}), 200
+    return jsonify({
+        'success': True, 'options': out,
+        'vendor': locked_vendor, 'vendor_conflict': vendor_conflict,
+    }), 200
 
 
 @api_bp.route('/evaluate-customization', methods=['POST', 'OPTIONS'])

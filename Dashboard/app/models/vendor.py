@@ -6,7 +6,7 @@ from app import db
 class Vendor(db.Model):
     __tablename__ = 'vendors'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
     shop_name = db.Column(db.String(150), nullable=False)
     city = db.Column(db.String(100))
     address = db.Column(db.Text)

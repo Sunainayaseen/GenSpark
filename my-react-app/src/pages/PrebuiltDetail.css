@@ -61,13 +61,19 @@
   border-radius: var(--radius-xl);
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 20px 56px rgba(15, 23, 42, 0.12);
+  transition: box-shadow 0.25s ease;
+}
+
+.prebuilt-detail-card:hover {
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.16);
 }
 
 .prebuilt-detail-hero {
   position: relative;
   min-height: 320px;
-  background: #0f172a;
+  background: linear-gradient(160deg, #1e293b 0%, #0f172a 65%);
+  overflow: hidden;
 }
 
 .prebuilt-detail-accent {
@@ -109,11 +115,70 @@
   inset: 0;
 }
 
+.prebuilt-detail-image-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0) 55%, rgba(15, 23, 42, 0.55) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .prebuilt-detail-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.5s ease;
+}
+
+.prebuilt-detail-card:hover .prebuilt-detail-image {
+  transform: scale(1.04);
+}
+
+/* Graceful fallback when the hero image 404s / fails to load */
+.prebuilt-detail-image-fallback-label {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.02em;
+}
+
+.prebuilt-detail-image-wrap--fallback {
+  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.06), transparent 60%);
+}
+
+.prebuilt-detail-image-wrap--fallback .prebuilt-detail-image-fallback-label {
+  display: flex;
+}
+
+.prebuilt-detail-price-chip {
+  position: absolute;
+  right: var(--spacing-lg);
+  bottom: var(--spacing-lg);
+  z-index: 2;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(6px);
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+}
+
+@media (max-width: 900px) {
+  .prebuilt-detail-price-chip {
+    display: none;
+  }
 }
 
 .prebuilt-detail-body {
@@ -168,6 +233,28 @@
 
 .prebuilt-detail-stat {
   margin: 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-md);
+  background: rgba(var(--primary-rgb), 0.04);
+  border: 1px solid rgba(var(--primary-rgb), 0.08);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.prebuilt-detail-stat:hover {
+  background: rgba(var(--primary-rgb), 0.07);
+  border-color: rgba(var(--primary-rgb), 0.16);
+}
+
+.prebuilt-detail-stat--price {
+  background: rgba(var(--primary-rgb), 0.08);
+  border-color: rgba(var(--primary-rgb), 0.18);
+}
+
+.prebuilt-detail-stat-sub {
+  display: block;
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 400;
 }
 
 .prebuilt-detail-stat dt {
@@ -220,9 +307,9 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .prebuilt-detail-spec-row {
@@ -233,6 +320,25 @@
   border-radius: var(--radius-sm);
   background: rgba(var(--primary-rgb), 0.05);
   border: 1px solid rgba(var(--primary-rgb), 0.1);
+  border-left: 3px solid rgba(var(--primary-rgb), 0.25);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.prebuilt-detail-spec-row:hover {
+  background: rgba(var(--primary-rgb), 0.08);
+  border-left-color: var(--primary);
+}
+
+.prebuilt-detail-spec-matched {
+  display: block;
+  font-size: 0.74rem;
+  color: #64748b;
+}
+
+.prebuilt-detail-spec-matching {
+  display: block;
+  font-size: 0.74rem;
+  color: #94a3b8;
 }
 
 .prebuilt-detail-spec-label {
@@ -326,6 +432,26 @@
   color: #64748b;
 }
 
+.prebuilt-detail-cart-msg {
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.prebuilt-detail-cart-msg--success {
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.prebuilt-detail-cart-msg--error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
 .prebuilt-detail-actions {
   display: flex;
   flex-wrap: wrap;
@@ -337,6 +463,7 @@
 
 .prebuilt-detail-btn-primary {
   min-width: 140px;
+  box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.28);
 }
 
 .prebuilt-detail-link-cart {
@@ -359,6 +486,10 @@
   .prebuilt-detail-hero {
     min-height: 260px;
     aspect-ratio: 16 / 10;
+  }
+
+  .prebuilt-detail-specs-list {
+    grid-template-columns: 1fr;
   }
 }
 

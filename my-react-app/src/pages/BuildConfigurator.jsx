@@ -51,7 +51,7 @@ const BuildConfigurator = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { selectedBuild } = useApp();
-  const { addToCart } = useCart();
+  const { addToCart, addBuildToCart } = useCart();
 
   // --- Build resolution (curated prebuilt -> real catalog components) ---
   const [resolution, setResolution] = useState(null);
@@ -109,6 +109,7 @@ const BuildConfigurator = () => {
       ),
     // depend on `resolution` (stable until it's actually re-set), not the locally
     // derived `slots` (a fresh [] literal every render when resolution.slots is falsy)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [resolution]
   );
   const assemblyFee = buildNeedsAssembly ? ASSEMBLY_FEE : 0;
@@ -133,7 +134,7 @@ const BuildConfigurator = () => {
     if (!resolution) return null;
     setAdding(true);
     try {
-      const result = await addResolvedBuildToCart(resolution.slots, addToCart, { silent: true });
+      const result = await addResolvedBuildToCart(resolution.slots, addBuildToCart);
       setAddResult(result);
       return result;
     } catch (err) {
@@ -448,10 +449,15 @@ const BuildConfigurator = () => {
                 ) : null}
 
                 {addResult ? (
-                  <p className="cfg-inline-msg" role="status">
+                  <p
+                    className={`cfg-inline-msg ${addResult.added > 0 ? '' : 'cfg-inline-msg--error'}`}
+                    role="status"
+                  >
                     {addResult.added > 0
-                      ? `Added ${addResult.added} component${addResult.added === 1 ? '' : 's'} to your cart.`
-                      : 'These parts aren’t in stock yet — pick alternatives from the catalog.'}
+                      ? `Added ${addResult.added} component${addResult.added === 1 ? '' : 's'} to your cart.${
+                          addResult.vendor?.shop_name ? ` Vendor: ${addResult.vendor.shop_name}.` : ''
+                        }`
+                      : addResult.error || 'These parts aren’t in stock yet — pick alternatives from the catalog.'}
                   </p>
                 ) : null}
               </div>

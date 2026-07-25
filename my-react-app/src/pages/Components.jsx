@@ -46,18 +46,27 @@ const ComponentCard = memo(function ComponentCard({
     () => getComponentPlaceholderKind(c.category, c.name),
     [c.category, c.name]
   );
+  // Deliberately narrower than `c` as a whole: `c` is a fresh object reference on
+  // every parent render (mapped from the fetched list), so memoizing on the
+  // specific fields this actually reads avoids recomputing candidates for
+  // unrelated field changes.
   const candidates = useMemo(
     () => getComponentImageCandidates(c, apiBase),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- narrower than `c` on purpose, see comment above
     [c.id, c.image_url, c.category, c.name, apiBase]
   );
 
   const [imgFailIdx, setImgFailIdx] = useState(0);
   const [imgLoaded, setImgLoaded] = useState(false);
 
+  // Resets the image-fallback index when the underlying component (c.id) or its
+  // resolved image candidates change; equivalent to a key-reset but this card is
+  // reused across a list without per-item remounting.
+  const candidatesKey = candidates.join('|');
   useEffect(() => {
     setImgFailIdx(0);
     setImgLoaded(false);
-  }, [c.id, candidates.join('|')]);
+  }, [c.id, candidatesKey]);
 
   const activeSrc = candidates[imgFailIdx] ?? null;
   const showRaster = imgFailIdx < candidates.length && activeSrc;
@@ -209,7 +218,27 @@ export default function Components() {
   const [expandedId, setExpandedId] = useState(null);
   const [vendorDetails, setVendorDetails] = useState({});
   const [vendorLoadingId, setVendorLoadingId] = useState(null);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const searchInputRef = useRef(null);
+  const categorySelectRef = useRef(null);
+
+  useEffect(() => {
+    if (!categoryMenuOpen) return undefined;
+    const handlePointerDown = (e) => {
+      if (categorySelectRef.current && !categorySelectRef.current.contains(e.target)) {
+        setCategoryMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setCategoryMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [categoryMenuOpen]);
 
   const apiBase = useMemo(() => getFlaskBase() || getFlaskBaseFallback() || '', []);
 
@@ -402,22 +431,68 @@ export default function Components() {
               ) : null}
             </label>
           </div>
-          <label className="components-filter-label">
-            Category
-            <select
-              className="components-filter-select"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              aria-label="Filter by category"
-            >
-              <option value="">All categories</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="components-filter-label" ref={categorySelectRef}>
+            <span className="components-filter-label-text">Category</span>
+            <div className="components-select">
+              <button
+                type="button"
+                className={`components-select-trigger ${categoryMenuOpen ? 'is-open' : ''}`}
+                onClick={() => setCategoryMenuOpen((open) => !open)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setCategoryMenuOpen(true);
+                  }
+                }}
+                aria-haspopup="listbox"
+                aria-expanded={categoryMenuOpen}
+                aria-label="Filter by category"
+              >
+                <span className="components-select-value">{categoryFilter || 'All categories'}</span>
+                <svg
+                  className="components-select-chevron"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              {categoryMenuOpen && (
+                <ul className="components-select-menu" role="listbox" aria-label="Category">
+                  <li
+                    role="option"
+                    aria-selected={categoryFilter === ''}
+                    className={`components-select-option ${categoryFilter === '' ? 'is-selected' : ''}`}
+                    onClick={() => {
+                      setCategoryFilter('');
+                      setCategoryMenuOpen(false);
+                    }}
+                  >
+                    All categories
+                  </li>
+                  {categories.map((cat) => (
+                    <li
+                      key={cat}
+                      role="option"
+                      aria-selected={categoryFilter === cat}
+                      className={`components-select-option ${categoryFilter === cat ? 'is-selected' : ''}`}
+                      onClick={() => {
+                        setCategoryFilter(cat);
+                        setCategoryMenuOpen(false);
+                      }}
+                    >
+                      {cat}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
           <span
             id="components-search-status"
             className="components-count"

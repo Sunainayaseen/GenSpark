@@ -82,14 +82,15 @@ const About = () => {
       });
     }, { threshold: 0.5 });
 
-    if (statsRef.current) {
-      statsObserver.observe(statsRef.current);
+    const statsNode = statsRef.current;
+    if (statsNode) {
+      statsObserver.observe(statsNode);
     }
 
     return () => {
       if (cleanup) cleanup();
-      if (statsRef.current) {
-        statsObserver.unobserve(statsRef.current);
+      if (statsNode) {
+        statsObserver.unobserve(statsNode);
       }
     };
   }, [statsAnimated]);

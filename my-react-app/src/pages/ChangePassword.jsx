@@ -17,6 +17,9 @@ export default function ChangePassword() {
   const sessionUser = useMemo(() => {
     const { user: stored } = loadAuthSession();
     return stored?.email ? stored : null;
+    // re-read localStorage whenever the auth context's user changes (login/logout),
+    // even though `user` itself isn't read in the body
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.email]);
 
   const activeUser = user?.email ? user : sessionUser;

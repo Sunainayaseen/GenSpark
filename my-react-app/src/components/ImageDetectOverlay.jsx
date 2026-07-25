@@ -90,6 +90,9 @@ export default function ImageDetectOverlay({
 
   // Position the popover relative to the active box (percentages map cleanly onto
   // the frame since the SVG viewBox == natural image size). Flip side/edge near borders.
+  // activeDet is a plain array-index lookup (detections[activeIndex]), not an
+  // independently memoized value, so the React Compiler declines to verify this
+  // further — the plain useMemo below is correct as-is.
   const popStyle = useMemo(() => {
     if (!activeDet || !nw || !nh) return null;
     const xy = resolveXyxy(activeDet, nw, nh);
@@ -103,7 +106,7 @@ export default function ImageDetectOverlay({
     if (anchorTop) style.bottom = `${Math.max(0, (1 - y1 / nh) * 100)}%`;
     else style.top = `${Math.min(98, (y2 / nh) * 100)}%`;
     return style;
-  }, [activeDet, nw, nh]);
+  }, [activeDet, nw, nh]); // eslint-disable-line react-hooks/preserve-manual-memoization
 
   const handleAdd = async (m) => {
     if (!m?.id || addingId) return;

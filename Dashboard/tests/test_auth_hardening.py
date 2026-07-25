@@ -82,3 +82,36 @@ def test_reset_allowed_for_forced_first_login(client, db_session):
     user = User.query.filter_by(email='new@test.com').first()
     assert user.check_password('chosen123')
     assert user.must_change_password is False
+
+
+# --- rate limiting: brute-forcing a seeded/leaked OTP on this unauthenticated
+# endpoint must lock out after repeated wrong attempts, same as /login --------
+
+def test_force_update_password_locks_out_after_repeated_wrong_otp(client, db_session):
+    _make_user('bruteforced@test.com', 'realotp123', must_change=True)
+    last_resp = None
+    for _ in range(8):
+        last_resp = client.post('/api/force-update-password', json={
+            'email': 'bruteforced@test.com',
+            'current_password': 'wrong-guess',
+            'new_password': 'whatever1',
+        })
+        assert last_resp.status_code == 400, last_resp.get_json()
+
+    locked_resp = client.post('/api/force-update-password', json={
+        'email': 'bruteforced@test.com',
+        'current_password': 'wrong-guess',
+        'new_password': 'whatever1',
+    })
+    assert locked_resp.status_code == 429
+
+    # Even the CORRECT otp is now rejected until the lockout window passes —
+    # that is the whole point: an attacker can't keep guessing indefinitely.
+    still_locked = client.post('/api/force-update-password', json={
+        'email': 'bruteforced@test.com',
+        'current_password': 'realotp123',
+        'new_password': 'whatever1',
+    })
+    assert still_locked.status_code == 429
+    user = User.query.filter_by(email='bruteforced@test.com').first()
+    assert user.check_password('realotp123'), 'password must be unchanged while locked out'

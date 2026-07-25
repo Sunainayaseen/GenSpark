@@ -26,10 +26,6 @@ import ChangePassword from "./pages/ChangePassword";
 const CartPage = lazy(() => import("./pages/CartPage"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const OrderPlacedSuccess = lazy(() => import("./pages/OrderPlacedSuccess"));
-const EcomCartPage = lazy(() => import("./ecommerce/CartPage"));
-const CheckoutPage = lazy(() => import("./ecommerce/CheckoutPage"));
-const OrderSuccess = lazy(() => import("./ecommerce/OrderSuccess"));
-const AdminEcomPanel = lazy(() => import("./ecommerce/AdminEcomPanel"));
 const MyOrders = lazy(() => import("./pages/MyOrders"));
 const TrackOrder = lazy(() => import("./pages/TrackOrder"));
 
@@ -84,10 +80,6 @@ function AnimatedRoutes() {
       <Route path="/checkout" element={<Checkout />} />
       <Route path="/stripe-verify" element={<StripeVerifyTest />} />
       <Route path="/order-success" element={<OrderPlacedSuccess />} />
-      <Route path="/ecom/cart" element={<EcomCartPage />} />
-      <Route path="/ecom/checkout" element={<CheckoutPage />} />
-      <Route path="/ecom/success" element={<OrderSuccess />} />
-      <Route path="/ecom/admin" element={<AdminEcomPanel />} />
       <Route path="/my-orders" element={<MyOrders />} />
       <Route path="/track/:orderId" element={<TrackOrder />} />
       <Route path="/order/:id" element={<OrderStatus />} />
@@ -108,8 +100,7 @@ function App() {
 
     const fetchApi = async () => {
       try {
-        const response = await axios.get(getApiUrl('/message'));
-        if (response.data?.message) console.log(response.data.message);
+        await axios.get(getApiUrl('/message'));
       } catch (error) {
         console.error(error);
       }

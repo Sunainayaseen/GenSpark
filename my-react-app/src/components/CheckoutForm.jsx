@@ -60,6 +60,7 @@ export default function CheckoutForm({
   onValidate,
   onSuccess,
   currencyLabel = 'PKR',
+  disabled = false,
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -78,7 +79,7 @@ export default function CheckoutForm({
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
-    if (loading || !stripe || !elements) return;
+    if (loading || !stripe || !elements || disabled) return;
 
     setStatus({ type: '', message: '' });
 
@@ -101,7 +102,11 @@ export default function CheckoutForm({
 
     try {
       setActiveStep('intent');
-      const intentRes = await createPaymentIntent(amount);
+      const intentRes = await createPaymentIntent({
+        items: cartItems,
+        shippingAddress,
+        shippingFee,
+      });
       const clientSecret = intentRes.clientSecret;
 
       if (!clientSecret) {
@@ -207,7 +212,7 @@ export default function CheckoutForm({
         type="button"
         onClick={handlePaymentSubmit}
         className="btn btn-primary btn-lg stripe-pay-btn"
-        disabled={!stripeReady || loading}
+        disabled={!stripeReady || loading || disabled}
         aria-busy={loading}
       >
         {loading ? 'Processing payment…' : `Pay ${formattedAmount}`}

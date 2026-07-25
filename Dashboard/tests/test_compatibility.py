@@ -87,3 +87,100 @@ def test_generic_oem_cooler_still_passes():
     })
     cooler = _check(res, 'CPU ↔ Cooler socket')
     assert cooler and cooler['status'] == 'pass'
+
+
+# --- CMP-CONN: GPU <-> PSU connector check is a real comparison, not a no-op --
+
+def test_underpowered_connectors_fail_even_with_enough_wattage():
+    """CMP-CONN-01 — a high-wattage-but-few-connector PSU still fails the
+    connector check for a card that needs more 8-pin-equivalents than it has.
+    A 4090 needs 3x8-pin (native 16-pin via adapter); a 550W PSU only has 2x8-pin."""
+    res = validate_build({
+        'GPU': _part('NVIDIA RTX 4090 Graphics Card'),
+        'PSU': _part('Corsair 650W 80+ Gold PSU'),
+    })
+    conn = _check(res, 'GPU ↔ PSU connectors')
+    assert conn and conn['status'] == 'fail'
+
+
+def test_sufficient_connectors_pass():
+    """CMP-CONN-02 — a 1000W PSU (4x8-pin + 16-pin) covers a 4090's requirement."""
+    res = validate_build({
+        'GPU': _part('NVIDIA RTX 4090 Graphics Card'),
+        'PSU': _part('Corsair 1000W 80+ Gold PSU'),
+    })
+    conn = _check(res, 'GPU ↔ PSU connectors')
+    assert conn and conn['status'] == 'pass'
+
+
+# --- CMP-COOLER-CASE: cooler height vs case clearance ------------------------
+
+def test_air_cooler_fits_default_case_clearance():
+    """CMP-COOLER-CASE-01 — a standard air cooler fits a standard case; proves
+    the rule is now evaluated (previously it did not exist at all)."""
+    res = validate_build({
+        'Cooler': _part('Cooler Master Hyper Air Tower Cooler'),
+        'Case': _part('Mid Tower Case'),
+    })
+    clearance = _check(res, 'Cooler ↔ Case clearance')
+    assert clearance and clearance['status'] == 'pass'
+
+
+def test_oversized_cooler_exceeds_case_clearance_fails():
+    """CMP-COOLER-CASE-02 — a cooler taller than the case's clearance fails,
+    using explicit structured specs (bypasses name-derivation to test the
+    comparison itself, since no catalog-name-derived case is narrow enough
+    to trigger this with today's default height/clearance figures)."""
+    tall_cooler = SimpleNamespace(
+        name='Oversized Air Tower Cooler',
+        specs={'kind': 'cooler', 'height_mm': 200, 'sockets': [], 'tdp_rating_w': 220, 'confident': True},
+    )
+    tight_case = SimpleNamespace(
+        name='Small Form Factor Case',
+        specs={'kind': 'case', 'cooler_height_mm': 150, 'gpu_clearance_mm': 300,
+               'form_factor': 'ITX', 'supported_form_factors': ['ITX'], 'confident': True},
+    )
+    res = validate_build({'Cooler': tall_cooler, 'Case': tight_case})
+    clearance = _check(res, 'Cooler ↔ Case clearance')
+    assert clearance and clearance['status'] == 'fail'
+    assert res['compatible'] is False
+
+
+# --- CMP-PCIE: PCIe generation mismatch is a warning, never a hard failure --
+
+def test_pcie_gen_mismatch_is_a_warning_not_a_failure():
+    """CMP-PCIE-01 — a Gen5 GPU on a Gen4 board still works (backward
+    compatible), so the build must remain 'compatible' with only a warning."""
+    res = validate_build({
+        'GPU': _part('NVIDIA RTX 5070 Ti Graphics Card'),       # PCIe Gen5
+        'Motherboard': _part('ASUS B550 Motherboard'),           # PCIe Gen4 board
+    })
+    pcie = _check(res, 'GPU ↔ Motherboard PCIe generation')
+    assert pcie and pcie['status'] == 'warn'
+    assert res['compatible'] is True
+
+
+# --- CMP-BIOS: CPU generation vs motherboard chipset BIOS ceiling -----------
+
+def test_newer_cpu_on_older_chipset_warns_bios_update():
+    """CMP-BIOS-01 — a Ryzen 9000 CPU on a B650 board (launch BIOS covers up
+    to 7000-series) needs a BIOS update — a warning, never a hard failure,
+    since flashing the BIOS resolves it without new hardware."""
+    res = validate_build({
+        'CPU': _part('AMD Ryzen 7 9700X Processor'),
+        'Motherboard': _part('ASUS B650 Motherboard'),
+    })
+    bios = _check(res, 'CPU ↔ Motherboard BIOS support')
+    assert bios and bios['status'] == 'warn'
+    assert res['compatible'] is True
+
+
+def test_matching_cpu_gen_and_chipset_passes_bios_check():
+    """CMP-BIOS-02 — a Ryzen 7000 CPU on the same B650 board is within its
+    stock BIOS support."""
+    res = validate_build({
+        'CPU': _part('AMD Ryzen 7 7700 Processor'),
+        'Motherboard': _part('ASUS B650 Motherboard'),
+    })
+    bios = _check(res, 'CPU ↔ Motherboard BIOS support')
+    assert bios and bios['status'] == 'pass'

@@ -66,6 +66,21 @@ def _search(name, table, default):
     return default
 
 
+def _cpu_gen(n: str, socket: str | None) -> int | None:
+    """Numeric CPU generation marker, used only for the BIOS-support advisory
+    below — AMD: series thousand (7000/9000), Intel: generation number (12/13/14)."""
+    if socket == 'AM5':
+        m = re.search(r'\b([789])\d{3}', n)
+        return int(m.group(1)) * 1000 if m else None
+    if socket == 'AM4':
+        m = re.search(r'\b([12345])\d{3}', n)
+        return int(m.group(1)) * 1000 if m else None
+    if socket == 'LGA1700':
+        m = re.search(r'i[3579][\s-]?(\d{2})\d{3}', n)
+        return int(m.group(1)) if m else None
+    return None
+
+
 def _cpu_specs(name: str) -> dict:
     n = name.lower()
     socket = chipset = None
@@ -93,8 +108,18 @@ def _cpu_specs(name: str) -> dict:
 
     return {
         'kind': 'cpu', 'socket': socket, 'ddr': ddr, 'igpu': igpu,
-        'tdp_w': _search(n, _CPU_TDP, 65), 'confident': confident,
+        'tdp_w': _search(n, _CPU_TDP, 65), 'gen': _cpu_gen(n, socket),
+        'confident': confident,
     }
+
+
+# Max CPU series/generation a chipset's stock (launch) BIOS supports without a
+# firmware update — not a hard block (a BIOS flash resolves it), so the
+# compatibility engine surfaces this as a 'warn', never a 'fail'.
+_BIOS_GEN_CEILING = {
+    'X670': 7000, 'B650': 7000, 'X870': 9000, 'B850': 9000, 'A620': 9000,
+    'Z690': 12, 'B660': 12, 'H610': 12, 'Z790': 14, 'B760': 14, 'B860': 14, 'Z890': 14,
+}
 
 
 def _mobo_specs(name: str) -> dict:
@@ -134,6 +159,7 @@ def _mobo_specs(name: str) -> dict:
         'm2_slots': 3 if high else (2 if form != 'ITX' else 2),
         'sata_ports': 6 if high else 4,
         'pcie_gen': 5 if (high or chipset in ('B650', 'B850', 'X870')) else 4,
+        'bios_gen_ceiling': _BIOS_GEN_CEILING.get(chipset),
         'confident': confident,
     }
 
@@ -187,6 +213,27 @@ def _psu_specs(name: str) -> dict:
         'pcie_connectors': conns, 'form_factor': 'SFX' if 'sfx' in n else 'ATX',
         'confident': watts is not None,
     }
+
+
+def connector_count(spec_str: str | None) -> int:
+    """Parse a '2×8-pin PCIe', '8-pin', or '16-pin (3×8-pin adapter)' style
+    string into the number of 8-pin-equivalent PCIe power connectors it
+    represents. Used to check a PSU's actual connectors against a GPU's
+    stated requirement instead of just asserting a match. When a GPU lists
+    more than one supported option ('8-pin / 16-pin'), the least demanding
+    option is used, since satisfying either is enough to run the card."""
+    if not spec_str:
+        return 1
+    counts = []
+    for opt in re.split(r'\s*/\s*', spec_str):
+        m = re.search(r'(\d+)\s*[x×]\s*8-pin', opt, re.I)
+        if m:
+            counts.append(int(m.group(1)))
+        elif re.search(r'16-pin', opt, re.I):
+            counts.append(4)   # bare native 16-pin, no adapter spec ⇒ needs an ATX3.0-class PSU
+        elif re.search(r'8-pin', opt, re.I):
+            counts.append(1)
+    return min(counts) if counts else 1
 
 
 def _case_specs(name: str) -> dict:

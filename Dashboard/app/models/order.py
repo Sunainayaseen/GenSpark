@@ -2,6 +2,8 @@
 from datetime import datetime
 from app import db
 
+PENDING_CHECKOUT_STATUSES = ('created', 'succeeded', 'failed', 'finalized')
+
 ORDER_STATUSES = [
     'pending', 'approved', 'processing', 'completed', 'rejected',
     # After vendor completion + admin proof approval — vendor may dispatch.
@@ -91,6 +93,26 @@ class VendorOrderItem(db.Model):
     unit_price = db.Column(db.Numeric(12, 2), default=0)
     total_price = db.Column(db.Numeric(12, 2), default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PendingCheckout(db.Model):
+    """Snapshot of a Stripe checkout attempt, captured server-side at
+    PaymentIntent-creation time. Lets the /webhooks/stripe handler finalize an
+    order on its own — independent of whether the browser that started the
+    checkout ever calls back — instead of order creation depending solely on
+    the client staying alive after Stripe confirms the charge."""
+    __tablename__ = 'pending_checkouts'
+    id = db.Column(db.Integer, primary_key=True)
+    payment_intent_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    items_json = db.Column(db.Text, nullable=False)
+    shipping_address = db.Column(db.Text)
+    shipping_fee = db.Column(db.Numeric(12, 2), default=0)
+    total_amount = db.Column(db.Numeric(12, 2), default=0)
+    status = db.Column(db.String(20), default='created')  # created, succeeded, failed, finalized
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
 
 
 def sync_master_order_status_from_vendor_orders(order_id):

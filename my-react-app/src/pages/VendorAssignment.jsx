@@ -3,215 +3,113 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useCart } from '../context/CartContext';
 import './VendorAssignment.css';
-import { dashboardGet, dashboardPost } from '../api/dashboardApi';
-import { useConfirm } from '../components/ConfirmProvider';
+import { resolveBuildParts } from '../utils/buildResolver';
 
+// GenSpark has no warehouse — a PC build must be fulfilled entirely by ONE
+// vendor (assembly is done by the supplying vendor). This page therefore only
+// ever offers vendors that have every resolved part of `selectedBuild` in
+// stock; it never lets a build get split across vendors.
 const VendorAssignment = () => {
   const navigate = useNavigate();
-  const { selectedBuild, userRequirements } = useApp();
-  const { addToCart, cartItems } = useCart();
-  const { confirm } = useConfirm();
+  const { selectedBuild } = useApp();
+  const { addBuildToCart, getBuildVendorOptions, cartItems } = useCart();
+
   const [selectedVendor, setSelectedVendor] = useState(null);
-  const [vendors, setVendors] = useState([]);
+  const [eligibleVendors, setEligibleVendors] = useState([]);
+  const [resolvedComponents, setResolvedComponents] = useState([]);
+  const [unavailable, setUnavailable] = useState(false);
   const [vendorsLoading, setVendorsLoading] = useState(false);
   const [vendorsError, setVendorsError] = useState(null);
-  const [vendorBlockLoading, setVendorBlockLoading] = useState(false);
-  const [vendorBlockError, setVendorBlockError] = useState(null);
   const [placing, setPlacing] = useState(false);
   const [confirmError, setConfirmError] = useState('');
 
-  useEffect(() => {
-    const loadVendors = async () => {
-      try {
-        setVendorsLoading(true);
-        setVendorsError(null);
-        const res = await dashboardGet('/vendors');
-        // API returns { success, count, vendors: [...] }
-        const list = Array.isArray(res?.vendors) ? res.vendors : [];
-        setVendors(list);
-      } catch (err) {
-        console.error('Failed to load vendors', err);
-        setVendorsError(err.message || 'Failed to load vendors');
-      } finally {
-        setVendorsLoading(false);
-      }
-    };
-
-    loadVendors();
-  }, []);
-
-  useEffect(() => {
-    // Keep CTA usable: auto-pick first vendor when list is available.
-    if (!selectedVendor && vendors.length > 0) {
-      setSelectedVendor(vendors[0]);
+  const loadEligibleVendors = async () => {
+    const parts = selectedBuild?.parts;
+    if (!Array.isArray(parts) || parts.length === 0) {
+      setEligibleVendors([]);
+      setResolvedComponents([]);
+      setUnavailable(false);
+      return;
     }
-  }, [vendors, selectedVendor]);
 
-  const refreshVendors = async () => {
+    setVendorsLoading(true);
+    setVendorsError(null);
+    setUnavailable(false);
+    setSelectedVendor(null);
     try {
-      const res = await dashboardGet('/vendors');
-      const list = Array.isArray(res?.vendors) ? res.vendors : [];
-      setVendors(list);
-    } catch (err) {
-      console.error('Failed to refresh vendors', err);
-    }
-  };
+      const { slots } = await resolveBuildParts(parts);
+      const resolved = slots.filter((s) => s.status === 'resolved' && s.component?.id);
+      const components = resolved.map((s) => ({ component_id: s.component.id, quantity: 1 }));
+      setResolvedComponents(components);
 
-  const handleBlockVendor = async (vendor) => {
-    if (!vendor?.id) return;
-    const ok = await confirm({
-      title: 'Remove vendor?',
-      message: `Remove "${vendor.shop_name || vendor.name}" from the assignment list?`,
-      confirmText: 'Remove',
-      danger: true,
-    });
-    if (!ok) return;
-
-    try {
-      setVendorBlockLoading(true);
-      setVendorBlockError(null);
-      const res = await dashboardPost(`/vendors/${vendor.id}/block`, {});
-      if (!res?.success) {
-        throw new Error(res?.error || res?.message || 'Failed to block vendor');
+      if (!components.length) {
+        setEligibleVendors([]);
+        setUnavailable(true);
+        return;
       }
 
-      // Update UI after DB change.
-      setSelectedVendor(null);
-      await refreshVendors();
+      const result = await getBuildVendorOptions(components);
+      if (!result.ok) {
+        setVendorsError(result.error || 'Failed to check vendor availability');
+        setEligibleVendors([]);
+        return;
+      }
+      setEligibleVendors(result.vendors);
+      setUnavailable(!result.coversAll || result.vendors.length === 0);
     } catch (err) {
-      setVendorBlockError(err.message || 'Failed to block vendor');
+      console.error('Failed to resolve build / load vendors', err);
+      setVendorsError(err.message || 'Failed to load vendors');
     } finally {
-      setVendorBlockLoading(false);
+      setVendorsLoading(false);
     }
   };
 
-  /** Show every vendor returned from the API (all approved in DB), not filtered by city */
-  const displayVendors = vendors;
+  useEffect(() => {
+    loadEligibleVendors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBuild]);
 
-  const normalizeQuery = (value) => String(value || '')
-    .replace(/[•|,/()]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const buildPartQueries = (part) => {
-    const rawValue = normalizeQuery(part?.value);
-    const rawName = normalizeQuery(part?.name);
-    const shortValue = rawValue.split(' ').slice(0, 3).join(' ');
-
-    const byCategory = {
-      CPU: ['processor', 'cpu'],
-      GPU: ['graphics card', 'gpu'],
-      RAM: ['ram', 'memory'],
-      Motherboard: ['motherboard'],
-      Storage: ['ssd', 'storage'],
-      PSU: ['power supply', 'psu'],
-      Case: ['cabinet', 'case'],
-    };
-
-    const q = [
-      rawValue,
-      shortValue,
-      rawName,
-      ...(byCategory[rawName] || []),
-    ]
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    return [...new Set(q)];
-  };
-
-  const addBuildPartsAsComponents = async (vendorId) => {
-    const parts = Array.isArray(selectedBuild?.parts) ? selectedBuild.parts : [];
-    let addedCount = 0;
-    const usedComponentIds = new Set();
-
-    for (const part of parts) {
-      const query = String(part?.value || part?.name || '').trim().toLowerCase();
-      if (!query || query === 'integrated') continue;
-
-      try {
-        const queries = buildPartQueries(part);
-        let candidates = [];
-
-        for (const q of queries) {
-          const res = await dashboardGet(`/components/search?q=${encodeURIComponent(q)}&limit=20`);
-          const list = (Array.isArray(res?.components) ? res.components : [])
-            .filter((c) => Number(c.stock || 0) > 0)
-            .filter((c) => !usedComponentIds.has(c.id));
-          if (list.length > 0) {
-            candidates = list;
-            break;
-          }
-        }
-
-        if (candidates.length === 0) continue;
-
-        let partAdded = false;
-        for (const candidate of candidates) {
-          // 1) Prefer selected vendor, 2) fallback to auto vendor assignment.
-          const withSelectedVendor = await addToCart(
-            {
-              id: candidate.id,
-              item_type: 'component',
-              vendor_id: vendorId || null,
-            },
-            1
-          );
-          if (withSelectedVendor) {
-            usedComponentIds.add(candidate.id);
-            addedCount += 1;
-            partAdded = true;
-            break;
-          }
-
-          if (vendorId) {
-            const withAutoVendor = await addToCart(
-              {
-                id: candidate.id,
-                item_type: 'component',
-                vendor_id: null,
-              },
-              1
-            );
-            if (withAutoVendor) {
-              usedComponentIds.add(candidate.id);
-              addedCount += 1;
-              partAdded = true;
-              break;
-            }
-          }
-        }
-
-        if (!partAdded) {
-          continue;
-        }
-      } catch (_) {
-        // Skip failed match and keep trying remaining parts.
-      }
+  useEffect(() => {
+    // Keep CTA usable: default to the cheapest eligible vendor (list is
+    // already sorted cheapest-first by the backend).
+    if (!selectedVendor && eligibleVendors.length > 0) {
+      setSelectedVendor(eligibleVendors[0]);
     }
-
-    return addedCount > 0;
-  };
+  }, [eligibleVendors, selectedVendor]);
 
   const handleConfirmOrder = async () => {
-    const vendor = selectedVendor || (displayVendors.length > 0 ? displayVendors[0] : null);
-    if (!vendor) return;
     setConfirmError('');
 
-    // If cart already has items, continue directly to checkout.
-    if (Array.isArray(cartItems) && cartItems.length > 0) {
-      navigate('/checkout', { replace: true });
+    // No build in context (e.g. cart was already populated elsewhere) — just
+    // forward to checkout with whatever's already in the cart.
+    if (!resolvedComponents.length) {
+      if (Array.isArray(cartItems) && cartItems.length > 0) {
+        navigate('/checkout', { replace: true });
+      } else {
+        setConfirmError('Your cart is empty. Pick a build first.');
+      }
+      return;
+    }
+
+    const vendor = selectedVendor || (eligibleVendors.length > 0 ? eligibleVendors[0] : null);
+    if (!vendor) {
+      setConfirmError('Please select a vendor.');
       return;
     }
 
     setPlacing(true);
     try {
-      const ok = await addBuildPartsAsComponents(vendor?.id || null);
-
-      if (ok) {
+      const result = await addBuildToCart(resolvedComponents, vendor.id);
+      if (result.ok) {
         navigate('/checkout', { replace: true });
       } else {
-        setConfirmError('Selected build components are not available right now. Please try another build.');
+        setConfirmError(
+          result.code === 'VENDOR_CONFLICT'
+            ? 'This vendor no longer has every part in stock. Please pick another vendor.'
+            : result.error || 'Unable to continue to payment right now. Please try again.'
+        );
+        // Stock may have just changed under us — refresh the eligible list.
+        loadEligibleVendors();
       }
     } catch (_) {
       setConfirmError('Unable to continue to payment right now. Please try again.');
@@ -220,83 +118,62 @@ const VendorAssignment = () => {
     }
   };
 
-  const totalPrice = selectedBuild?.parts?.reduce((sum, part) => sum + (part.price || 0), 0) || selectedBuild?.price || 0;
-  const assemblyFee = selectedVendor?.serviceCost || 5000;
-  const shipping = 2000;
+  const selectedVendorTotal = selectedVendor?.total_price;
+  const totalPrice =
+    typeof selectedVendorTotal === 'number' && selectedVendorTotal > 0
+      ? selectedVendorTotal
+      : selectedBuild?.parts?.reduce((sum, part) => sum + (part.price || 0), 0) || selectedBuild?.price || 0;
+  const assemblyFee = selectedBuild?.parts?.length ? 5000 : 0;
+  const shipping = selectedBuild?.parts?.length ? 2000 : 0;
   const finalTotal = totalPrice + assemblyFee + shipping;
+
+  const hasBuild = Array.isArray(selectedBuild?.parts) && selectedBuild.parts.length > 0;
 
   return (
     <div className="vendor-assignment-page">
       <div className="container">
         <div className="page-header vendor-page-header">
           <h1>Finish your order</h1>
-          <p className="vendor-page-lede">
-            Pick who builds or ships your PC and review totals, then continue to payment.
-          </p>
         </div>
 
         <div className="assignment-grid">
           <div className="vendors-panel">
             <h2 className="vendors-panel-title">Choose a vendor</h2>
             <p className="vendors-panel-sub">
-              All approved partners from the database
-              {userRequirements.city ? (
-                <>
-                  {' · '}
-                  your preference: <strong>{userRequirements.city}</strong>
-                </>
-              ) : null}
-              {' · '}
-              tap a row to select
+              {hasBuild
+                ? 'Vendors with 100% of this build’s parts in stock · cheapest first'
+                : 'No build selected — continue with your current cart.'}
             </p>
-            <div className="vendor-options">
-              <label className="option-toggle">
-                <input
-                  type="radio"
-                  name="assign"
-                  value="auto"
-                  defaultChecked
-                />
-                <span>Let us pick the best match</span>
-              </label>
-              <label className="option-toggle">
-                <input
-                  type="radio"
-                  name="assign"
-                  value="manual"
-                  onChange={() => setSelectedVendor(null)}
-                />
-                <span>I’ll choose myself</span>
-              </label>
-            </div>
 
             <div className="vendors-list-wrap">
               {vendorsLoading && (
-                <div className="info-message">Loading vendors...</div>
+                <div className="info-message">Checking vendor stock...</div>
               )}
               {vendorsError && !vendorsLoading && (
                 <div className="error-message">{vendorsError}</div>
               )}
-              {vendorBlockError && (
-                <div className="error-message">{vendorBlockError}</div>
+              {!vendorsLoading && !vendorsError && hasBuild && unavailable && (
+                <div className="error-message">
+                  This build is currently unavailable because no vendor has all required components in stock.
+                </div>
               )}
-              {!vendorsLoading && !vendorsError && displayVendors.length === 0 && (
-                <div className="info-message">No vendors available.</div>
+              {!vendorsLoading && !vendorsError && !hasBuild && (
+                <div className="info-message">No build selected — your existing cart will be used.</div>
               )}
-              {!vendorsLoading && !vendorsError && displayVendors.length > 0 && (
+              {!vendorsLoading && !vendorsError && hasBuild && !unavailable && eligibleVendors.length > 0 && (
                 <div className="vendors-table" role="group">
                   <div className="vendors-list-head" id="vendors-list-head">
+                    <span className="vendors-col-radio" aria-hidden="true" />
                     <span className="vendors-col-vendor">Vendor</span>
-                    <span className="vendors-col-meta">City &amp; phone</span>
-                    <span className="vendors-col-action" aria-hidden="true" />
+                    <span className="vendors-col-meta">City &amp; price</span>
                   </div>
                   <div
                     className="vendors-list-scroll"
                     role="listbox"
                     aria-labelledby="vendors-list-head"
                   >
-                  {displayVendors.map((vendor) => {
-                    const label = vendor.shop_name || vendor.name || 'Vendor';
+                  {eligibleVendors.map((vendor) => {
+                    const label = vendor.shop_name || 'Vendor';
                     const initial = String(label).trim().charAt(0).toUpperCase() || 'V';
                     const selected = selectedVendor?.id === vendor.id;
                     return (
@@ -314,34 +191,37 @@ const VendorAssignment = () => {
                           }
                         }}
                       >
+                        <span className="vendor-radio" aria-hidden="true">
+                          {selected && (
+                            <svg viewBox="0 0 16 16" width="10" height="10">
+                              <path
+                                fill="currentColor"
+                                d="M6.2 11.2 3 8l-1.2 1.2 4.4 4.4L14.6 5.2 13.4 4z"
+                              />
+                            </svg>
+                          )}
+                        </span>
                         <div className="vendor-row-main">
                           <span className="vendor-avatar" aria-hidden>
                             {initial}
                           </span>
                           <div className="vendor-row-text">
                             <span className="vendor-name">{label}</span>
-                            {(vendor.approval_status || 'approved') === 'approved' && (
-                              <span className="vendor-badge">Verified</span>
-                            )}
+                            <span className="vendor-badge">All parts in stock</span>
+                            {vendor.avg_rating ? (
+                              <span className="vendor-rating">
+                                ★ {vendor.avg_rating.toFixed(1)}
+                                <span className="vendor-rating-count"> ({vendor.rating_count})</span>
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         <div className="vendor-row-meta">
                           <span>{vendor.city || '—'}</span>
-                          <span className="vendor-row-phone">{vendor.phone || '—'}</span>
+                          <span className="vendor-row-phone">
+                            PKR {Number(vendor.total_price || 0).toLocaleString('en-US')}
+                          </span>
                         </div>
-                        {selected && (
-                          <button
-                            type="button"
-                            className="vendor-remove-inline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleBlockVendor(vendor);
-                            }}
-                            disabled={vendorBlockLoading}
-                          >
-                            {vendorBlockLoading ? '…' : 'Remove'}
-                          </button>
-                        )}
                       </div>
                     );
                   })}
@@ -358,14 +238,18 @@ const VendorAssignment = () => {
                 <span>Build total</span>
                 <span>PKR {totalPrice.toLocaleString('en-US')}</span>
               </div>
-              <div className="summary-item">
-                <span>Assembly fee</span>
-                <span>PKR {assemblyFee.toLocaleString('en-US')}</span>
-              </div>
-              <div className="summary-item">
-                <span>Shipping</span>
-                <span>PKR {shipping.toLocaleString('en-US')}</span>
-              </div>
+              {assemblyFee > 0 && (
+                <div className="summary-item">
+                  <span>Assembly fee</span>
+                  <span>PKR {assemblyFee.toLocaleString('en-US')}</span>
+                </div>
+              )}
+              {shipping > 0 && (
+                <div className="summary-item">
+                  <span>Shipping</span>
+                  <span>PKR {shipping.toLocaleString('en-US')}</span>
+                </div>
+              )}
               <div className="summary-item total">
                 <span>Total</span>
                 <span>PKR {finalTotal.toLocaleString('en-US')}</span>
@@ -380,7 +264,12 @@ const VendorAssignment = () => {
               type="button"
               className="btn btn-primary btn-lg vendor-place-order-btn"
               onClick={handleConfirmOrder}
-              disabled={placing || vendorsLoading || displayVendors.length === 0}
+              disabled={
+                placing ||
+                vendorsLoading ||
+                (hasBuild && (unavailable || eligibleVendors.length === 0)) ||
+                (!hasBuild && (!Array.isArray(cartItems) || cartItems.length === 0))
+              }
             >
               {placing ? 'Continuing…' : 'Continue to checkout'}
             </button>
@@ -397,10 +286,3 @@ const VendorAssignment = () => {
 };
 
 export default VendorAssignment;
-
-
-
-
-
-
-

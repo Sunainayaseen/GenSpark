@@ -13,14 +13,15 @@ export default function ReviewsSection() {
   const reviewsStatsRef = useRef(null);
   const [statValues, setStatValues] = useState([0, 0, 0]);
 
-  // Count-up stats once, the first time the review section scrolls into view.
+  // Count-up stats every time the review section scrolls into view (up or down).
   useEffect(() => {
     const el = reviewsStatsRef.current;
     if (!el) return;
     const duration = 1200;
-    let hasPlayed = false;
+    let rafId = null;
 
     const runCountUp = () => {
+      if (rafId) cancelAnimationFrame(rafId);
       const start = performance.now();
       const tick = (now) => {
         const elapsed = now - start;
@@ -30,22 +31,29 @@ export default function ReviewsSection() {
           const v = target.value * easeOut;
           return target.decimals === 1 ? Math.round(v * 10) / 10 : Math.round(v);
         }));
-        if (t < 1) requestAnimationFrame(tick);
+        if (t < 1) rafId = requestAnimationFrame(tick);
       };
-      requestAnimationFrame(tick);
+      rafId = requestAnimationFrame(tick);
     };
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting || hasPlayed) return;
-        hasPlayed = true;
-        requestAnimationFrame(() => runCountUp());
-        observer.disconnect();
+        if (entries[0].isIntersecting) {
+          // Re-run the count-up each time it enters the viewport.
+          requestAnimationFrame(() => runCountUp());
+        } else {
+          // Reset to zero when it leaves so the next scroll-in re-animates.
+          if (rafId) cancelAnimationFrame(rafId);
+          setStatValues([0, 0, 0]);
+        }
       },
       { threshold: 0.2, rootMargin: '0px 0px 40px 0px' }
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, []);
 
   return (

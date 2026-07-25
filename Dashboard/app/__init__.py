@@ -134,14 +134,12 @@ def create_app(config_name='default'):
     from app.vendor import vendor_bp
     from app.rider import rider_bp
     from app.api import api_bp
-    from app.ecommerce import ecom_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(admin_bp, url_prefix='/admin')
     app.register_blueprint(vendor_bp, url_prefix='/vendor')
     app.register_blueprint(rider_bp, url_prefix='/rider')
     app.register_blueprint(api_bp, url_prefix='/api')
-    app.register_blueprint(ecom_bp, url_prefix='/api/ecom')
 
     @app.context_processor
     def inject_template_globals():
@@ -164,7 +162,6 @@ def create_app(config_name='default'):
 
     # API routes are exempt from CSRF (use token/auth for security in production)
     csrf.exempt(api_bp)
-    csrf.exempt(ecom_bp)
 
     if app.config.get('TESTING'):
         # Plain create_all on the in-memory DB — skip MySQL-specific ALTER migrations.

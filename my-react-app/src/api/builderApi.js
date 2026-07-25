@@ -111,7 +111,13 @@ export async function getBuildOptions(build) {
     if (!data?.success) {
       throw new Error(data?.error || 'Failed to load component options.');
     }
-    return data.options || {};
+    // Slot keys (cpu/gpu/ram/...) plus the resolved single-vendor info — assembly is
+    // done by the supplying vendor, so the build can only ever have one.
+    return {
+      ...(data.options || {}),
+      vendor: data.vendor || null,
+      vendorConflict: Boolean(data.vendor_conflict),
+    };
   } catch (error) {
     throw new Error(axiosErrorMessage(error, 'Failed to load component options.'));
   }

@@ -12,6 +12,11 @@ the configurator/checkout equals the amount actually charged at order time.
 import re
 
 ASSEMBLY_FEE_PKR = 5000.0
+# Flat shipping charged whenever the cart has at least one line — single source of
+# truth for every checkout path (COD, Stripe full payment, COD advance deposit).
+SHIPPING_FEE_PKR = 2000.0
+# Fraction of the order total collected up-front for Cash-on-Delivery orders.
+COD_ADVANCE_RATE = 0.30
 
 _CPU_RE = re.compile(r'(processor|ryzen|core\s?i\d|\bcpu\b|athlon|xeon|core\s*ultra)', re.I)
 _MOBO_WORD_RE = re.compile(r'(motherboard|mainboard)', re.I)

@@ -9,6 +9,7 @@ os.environ.setdefault('FLASK_ENV', 'development')
 from sqlalchemy import text
 from app import create_app, db
 from app.models import Role, User, Vendor, ComponentCategory, ComponentBrand, Component, PcBuild, Cart
+from app.utils.schema import _seed_password
 
 app = create_app()
 with app.app_context():
@@ -207,7 +208,8 @@ with app.app_context():
         ('Motherboard', 'motherboard'),
         ('Storage', 'storage'),
         ('PSU', 'psu'),
-        ('Cabinet', 'cabinet'),
+        ('Case', 'case'),
+        ('Cooling', 'cooling'),
     ]
     for name, slug in categories:
         if not ComponentCategory.query.filter_by(slug=slug).first():
@@ -217,15 +219,22 @@ with app.app_context():
     if not User.query.filter_by(email='admin@genspark.com').first():
         admin_role = Role.query.filter_by(name='admin').first()
         admin = User(name='Admin', email='admin@genspark.com', role_id=admin_role.id)
-        admin.set_password('admin123')
+        admin_password, admin_generated = _seed_password('admin123')
+        admin.set_password(admin_password)
+        admin.must_change_password = admin_generated
         db.session.add(admin)
         db.session.commit()
-        print('Created admin user: admin@genspark.com / admin123')
+        if admin_generated:
+            print(f'Created admin user: admin@genspark.com / {admin_password} (must change on first login)')
+        else:
+            print('Created admin user: admin@genspark.com / admin123')
     # Default vendor user (if not exists)
     if not User.query.filter_by(email='vendor@genspark.com').first():
         vendor_role = Role.query.filter_by(name='vendor').first()
         vendor_user = User(name='Vendor Demo', email='vendor@genspark.com', role_id=vendor_role.id)
-        vendor_user.set_password('vendor123')
+        vendor_password, vendor_generated = _seed_password('vendor123')
+        vendor_user.set_password(vendor_password)
+        vendor_user.must_change_password = vendor_generated
         db.session.add(vendor_user)
         db.session.flush()
         vendor_profile = Vendor(
@@ -238,7 +247,10 @@ with app.app_context():
         )
         db.session.add(vendor_profile)
         db.session.commit()
-        print('Created vendor user: vendor@genspark.com / vendor123')
+        if vendor_generated:
+            print(f'Created vendor user: vendor@genspark.com / {vendor_password} (must change on first login)')
+        else:
+            print('Created vendor user: vendor@genspark.com / vendor123')
 
     # Seed a few PcBuild products (so cart add-to-cart works with existing mock UI ids)
     default_builds = [

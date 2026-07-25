@@ -3,6 +3,10 @@ import { ORDER_STAGES } from '../constants/orderStages';
 
 const AppContext = createContext();
 
+// Splitting this hook into its own file would require updating every one of
+// its consumers' imports across the app; the rule only affects dev Fast
+// Refresh, not production behavior.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {

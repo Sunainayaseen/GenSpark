@@ -274,3 +274,26 @@
   border-radius: 3px;
   background: rgba(0, 0, 0, 0.06);
 }
+
+@media (max-width: 640px) {
+  .stripe-checkout-form {
+    padding: 1rem 0.85rem;
+  }
+
+  .stripe-form-header {
+    gap: 0.5rem;
+  }
+
+  .stripe-form-subtitle {
+    max-width: none;
+  }
+
+  .stripe-accepted {
+    gap: 0.25rem;
+  }
+
+  .stripe-test-body dl > div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}

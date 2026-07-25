@@ -500,6 +500,29 @@
   white-space: nowrap;
 }
 
+.checkout-vendor-conflict {
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--error);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.checkout-vendor-summary {
+  margin: 0 0 0.85rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary, var(--text-primary));
+}
+
+.checkout-summary-line--conflict .checkout-summary-line-title,
+.checkout-summary-line--conflict .checkout-summary-line-price {
+  color: var(--error);
+}
+
 .summary-divider {
   height: 1px;
   background: var(--border);

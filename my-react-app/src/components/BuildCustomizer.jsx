@@ -218,6 +218,18 @@ export default function BuildCustomizer({ buildComponents, purpose, budget, onAp
         </div>
       </div>
 
+      {/* Assembly is performed by the supplying vendor, so the whole build must
+          come from one vendor — surface it (or the conflict) prominently. */}
+      {options?.vendorConflict ? (
+        <p className="bc-vendor-conflict" role="alert">
+          All selected components must be sourced from a single vendor because
+          assembly is performed by the supplying vendor. Please choose components
+          from one vendor only.
+        </p>
+      ) : options?.vendor ? (
+        <p className="bc-vendor-summary">Sourced from: <strong>{options.vendor.shop_name}</strong></p>
+      ) : null}
+
       {/* Inline dropdown build editor */}
       {!options ? (
         <p className="build-customizer-busy">Loading components…</p>
@@ -304,7 +316,7 @@ export default function BuildCustomizer({ buildComponents, purpose, budget, onAp
         <button
           type="button"
           className="bc-cart-btn"
-          disabled={adding || busySlot}
+          disabled={adding || busySlot || Boolean(options?.vendorConflict)}
           onClick={() => onAddToCart(buildComponents)}
         >
           {adding ? (

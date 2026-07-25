@@ -41,7 +41,7 @@ const Checkout = () => {
   const { user, isLoggedIn } = useAuth();
   const { notify } = useConfirm();
   const { blockingOrder, checkingBlocking } = useBlockingOrder();
-  const { cartItems, vendorGroups, cartTotal, clearCart, cartLoading } = useCart();
+  const { cartItems, vendorGroups, cartTotal, clearCart, cartLoading, buildVendorConflict } = useCart();
 
   const [address, setAddress] = useState(initialAddress);
   const [savedAddresses, setSavedAddresses] = useState([]);
@@ -456,6 +456,7 @@ const Checkout = () => {
                       onValidate={validateForStripe}
                       onSuccess={handleStripeSuccess}
                       currencyLabel="PKR"
+                      disabled={buildVendorConflict.hasConflict}
                     />
                   </Elements>
                 ) : (
@@ -485,6 +486,18 @@ const Checkout = () => {
               <li>Admin verified</li>
             </ul>
 
+            {buildVendorConflict.hasConflict ? (
+              <p className="checkout-vendor-conflict" role="alert">
+                All selected components must be sourced from a single vendor because
+                assembly is performed by the supplying vendor. Please choose
+                components from one vendor only.
+              </p>
+            ) : buildVendorConflict.vendorName ? (
+              <p className="checkout-vendor-summary">
+                Build vendor: <strong>{buildVendorConflict.vendorName}</strong>
+              </p>
+            ) : null}
+
             <ul className="checkout-summary-items">
               {vendorGroups.length > 0
                 ? vendorGroups.map((group) => (
@@ -492,7 +505,14 @@ const Checkout = () => {
                       <div className="checkout-summary-vendor-name">{group.vendor_name}</div>
                       <ul>
                         {(group.items || []).map((item) => (
-                          <li key={item.cart_item_id} className="checkout-summary-line">
+                          <li
+                            key={item.cart_item_id}
+                            className={`checkout-summary-line${
+                              buildVendorConflict.conflictingItemIds.includes(item.cart_item_id)
+                                ? ' checkout-summary-line--conflict'
+                                : ''
+                            }`}
+                          >
                             <span className="checkout-summary-line-title">
                               {item.component_name || item.name} × {item.quantity}
                             </span>
@@ -545,7 +565,7 @@ const Checkout = () => {
               <button
                 type="submit"
                 className="btn btn-primary btn-lg"
-                disabled={submitting || Boolean(blockingOrder)}
+                disabled={submitting || Boolean(blockingOrder) || buildVendorConflict.hasConflict}
               >
                 {submitting ? 'Placing order…' : 'Place order'}
               </button>

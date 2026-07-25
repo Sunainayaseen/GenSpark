@@ -86,6 +86,12 @@ const Layout = ({ children }) => {
     };
   }, [isMenuOpen]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- these three effects all
+     react to router state (pathname / a one-time URL query param) right after
+     navigation to open the auth modal, two of them also rewriting the URL
+     (navigate()) to consume the param — that rewrite is itself a side effect,
+     so none of this can be computed during render. */
+
   // Admin / Vendor dashboard: auto-open login modal taake user turant login karke dashboard dekhe
   useEffect(() => {
     if (location.pathname === '/admin' || location.pathname === '/vendor/dashboard') {
@@ -104,7 +110,7 @@ const Layout = ({ children }) => {
     params.delete('email_verified');
     const next = params.toString();
     navigate({ pathname: location.pathname, search: next ? `?${next}` : '' }, { replace: true });
-  }, [location.search, location.pathname, navigate]);
+  }, [location.search, location.pathname, navigate, pushToast]);
 
   // e.g. checkout: ?login=1 opens sign-in, then clean URL
   useEffect(() => {
@@ -116,6 +122,7 @@ const Layout = ({ children }) => {
     const next = params.toString();
     navigate({ pathname: location.pathname, search: next ? `?${next}` : '' }, { replace: true });
   }, [location.search, location.pathname, navigate]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // After OAuth redirect: ?oauth=google or ?oauth=github – fetch /api/me and sync auth, then clean URL
   useEffect(() => {

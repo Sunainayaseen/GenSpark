@@ -530,7 +530,11 @@
   flex: 1;
   min-width: 0;
   position: relative;
-  z-index: 2;
+  /* No z-index here on purpose: each step must NOT get its own stacking
+     context, otherwise a later step's connector ::before (painted after
+     in DOM order) stacks above an earlier step's icon instead of being
+     masked by its white ring — icon/label z-index below compete directly
+     within .status-bar's single stacking context instead. */
 }
 
 /* Connector line from the PREVIOUS step's circle centre to this one's —
@@ -1051,6 +1055,13 @@
     max-width: 33.333%;
   }
 
+  /* 3 steps per row — the connector line assumes a single row, so hide it
+     on the first step of every wrapped row to stop it looping back over
+     the row above. */
+  .status-step:nth-child(3n+1)::before {
+    display: none;
+  }
+
   .os-stepper-track {
     display: none;
   }
@@ -1080,6 +1091,15 @@
   .status-step {
     flex: 0 0 calc(50% - 0.25rem);
     max-width: 50%;
+  }
+
+  /* 2 steps per row at this breakpoint — same fix, different row width. */
+  .status-step:nth-child(3n+1)::before {
+    display: block;
+  }
+
+  .status-step:nth-child(2n+1)::before {
+    display: none;
   }
 
   .os-section,

@@ -13,7 +13,7 @@
   <ul class="mb-0 pl-3 mt-2 w-100">
     {% for o in orders_pending_approval %}
     <li>
-      <a href="{{ url_for('admin.order_detail', order_id=o.id) }}">Order #{{ o.order_number or o.id }}</a>
+      <a href="{{ url_for('admin.order_detail', order_id=o.id) }}" style="color:#8a6100; text-decoration:underline; font-weight:600;">Order #{{ o.order_number or o.id }}</a>
       &mdash; Rs.{{ "%.2f"|format(o.total_amount or 0) }}
     </li>
     {% endfor %}
@@ -24,7 +24,7 @@
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
     <h3 class="card-title mb-0">All Orders</h3>
     {% if orders_pending_approval and orders_pending_approval|length > 0 %}
-    <span class="badge badge-warning" style="font-size:0.9rem;">{{ orders_pending_approval|length }} awaiting approval</span>
+    <span class="badge badge-warning" style="font-size:0.9rem; margin-left:auto;">{{ orders_pending_approval|length }} awaiting approval</span>
     {% endif %}
   </div>
   <div class="card-body table-responsive p-0">

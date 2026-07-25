@@ -239,6 +239,9 @@ def inventory_add():
         component_id = request.form.get('component_id', type=int)
         quantity = request.form.get('quantity', type=int) or 0
         price = request.form.get('price', type=float)
+        if price is not None and price < 0:
+            flash('Price cannot be negative.', 'danger')
+            return render_template('vendor/inventory_form.html', vendor=vendor, components=components, brands=brands, selected_brand_id=brand_id, item=None)
         if component_id and quantity >= 0:
             existing = VendorComponent.query.filter_by(vendor_id=vendor.id, component_id=component_id).first()
             if existing:

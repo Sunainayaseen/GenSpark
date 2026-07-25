@@ -37,6 +37,9 @@ const NotificationBell = () => {
   };
 
   useEffect(() => {
+    // Clearing local notification state when auth logs out is synchronizing
+    // with an external system (the socket/auth session).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!isLoggedIn || !user?.id) { setItems([]); setUnread(0); return undefined; }
     load();
     connectSocket(user);

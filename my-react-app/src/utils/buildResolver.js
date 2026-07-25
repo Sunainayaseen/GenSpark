@@ -10,7 +10,9 @@
  *
  * Backend (ERP, port 5000 dev / Railway prod — see flaskBase.js):
  *   GET  /api/components/search?q=&limit=&vendor_summary=1   (dashboardGet)
- *   POST /api/add-to-cart  (via CartContext.addToCart)
+ *   POST /api/cart/add-build  (via CartContext.addBuildToCart) — pins the whole
+ *        resolved build to ONE vendor; GenSpark has no warehouse, so a build's
+ *        parts can never be split across vendors.
  *
  * Deliberately ERP-native: it does NOT call /components/resolve or
  * /cart/add-build-parts (those live only in the standalone app.py, port 5001,
@@ -283,36 +285,50 @@ export function summarizeResolution(slots) {
 }
 
 /**
- * Add all in-stock resolved components to the ERP cart.
+ * Commit all in-stock resolved components to the ERP cart as ONE build — pinned
+ * server-side to a single vendor (assembly is performed by the supplying vendor,
+ * so a build can never be split across vendors; see /api/cart/add-build).
  * @param {Array} slots resolution from resolveBuildParts().slots
- * @param {(product:object, qty?:number, opts?:object)=>Promise<boolean>} addToCart from useCart()
- * @param {{silent?:boolean}} [opts] forwarded to addToCart (e.g. silent for bulk adds)
- * @returns {Promise<{added:number, failed:Array<string>}>}
+ * @param {(components:Array<{component_id:number,quantity:number}>, vendorId?:number|null)=>Promise<{ok:boolean,vendor?:object,error?:string,code?:string}>} addBuildToCart from useCart()
+ * @param {{vendorId?: number|null}} [opts] pin to a specific (full-coverage) vendor
+ * @returns {Promise<{added:number, failed:Array<string>, vendor:object|null, error:string|null, conflict:boolean}>}
  */
-export async function addResolvedBuildToCart(slots, addToCart, opts = {}) {
-  if (typeof addToCart !== 'function') {
-    throw new Error('addToCart from useCart() is required.');
+export async function addResolvedBuildToCart(slots, addBuildToCart, opts = {}) {
+  if (typeof addBuildToCart !== 'function') {
+    throw new Error('addBuildToCart from useCart() is required.');
   }
-  const addable = (Array.isArray(slots) ? slots : []).filter(
-    (s) => s.status === 'resolved' && s.component?.id
-  );
-  let added = 0;
-  const failed = [];
-  for (const s of addable) {
-    const ok = await addToCart(
-      { id: s.component.id, item_type: 'component', vendor_id: null },
-      1,
-      opts
-    );
-    if (ok) added += 1;
-    else failed.push(s.label);
+  const list = Array.isArray(slots) ? slots : [];
+  const resolved = list.filter((s) => s.status === 'resolved' && s.component?.id);
+  const failed = list
+    .filter((s) => s.status === 'not_found' || s.status === 'out_of_stock')
+    .map((s) => s.label);
+
+  if (!resolved.length) {
+    return { added: 0, failed, vendor: null, error: null, conflict: false };
   }
-  return { added, failed };
+
+  const components = resolved.map((s) => ({ component_id: s.component.id, quantity: 1 }));
+  const result = await addBuildToCart(components, opts.vendorId ?? null);
+
+  if (!result.ok) {
+    const conflict = result.code === 'VENDOR_CONFLICT';
+    return {
+      added: 0,
+      failed,
+      vendor: null,
+      error: conflict
+        ? 'This build is currently unavailable because no single vendor has every required part in stock.'
+        : (result.error || 'Could not add this build to cart.'),
+      conflict,
+    };
+  }
+
+  return { added: resolved.length, failed, vendor: result.vendor || null, error: null, conflict: false };
 }
 
 /** Convenience: resolve a prebuilt then add everything addable to the cart. */
-export async function resolveAndAddBuild(parts, addToCart, opts = {}) {
+export async function resolveAndAddBuild(parts, addBuildToCart, opts = {}) {
   const { slots, summary } = await resolveBuildParts(parts);
-  const { added, failed } = await addResolvedBuildToCart(slots, addToCart, opts);
-  return { slots, summary, added, failed };
+  const result = await addResolvedBuildToCart(slots, addBuildToCart, opts);
+  return { slots, summary, ...result };
 }

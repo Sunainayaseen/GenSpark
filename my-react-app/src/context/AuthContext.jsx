@@ -44,6 +44,10 @@ async function fetchSessionUser(token) {
   }
 }
 
+// Splitting this hook into its own file would require updating every one of
+// its consumers' imports across the app; the rule only affects dev Fast
+// Refresh, not production behavior.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

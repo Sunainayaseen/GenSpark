@@ -21,6 +21,38 @@ from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 
+def _validate_build_components(components_by_slot, qty_by_component_id):
+    """Run the same hardware-compatibility + single-vendor-coverage checks the
+    live shopping flow enforces (compatibility.py / vendor_coverage.py), so an
+    admin-curated PcBuild can never be saved incompatible or unshippable.
+
+    Returns a list of human-readable error strings (empty if the build is valid).
+    """
+    from app.services.compatibility import validate_build
+    from app.services.vendor_coverage import vendor_coverage_for_components
+
+    errors = []
+    if not components_by_slot:
+        return ['Add at least one component to the build.']
+
+    compat = validate_build(components_by_slot)
+    if not compat['compatible']:
+        for f in compat['failures']:
+            errors.append(f"Compatibility: {f['detail']}")
+
+    coverage = vendor_coverage_for_components(qty_by_component_id)
+    if not coverage['covers_all']:
+        missing_names = [
+            Component.query.get(cid).name for cid in coverage['missing_component_ids']
+            if Component.query.get(cid)
+        ]
+        errors.append(
+            'No single vendor currently stocks every part in this build'
+            + (f" — missing: {', '.join(missing_names)}." if missing_names else '.')
+        )
+    return errors
+
+
 def _get_brands_for_dropdown():
     """Load brands for dropdowns: try ORM first, then raw SQL (brand_id, brand_name)."""
     try:
@@ -388,6 +420,9 @@ def component_add():
         price = request.form.get('price', type=float) or 0
         stock = request.form.get('stock', type=int) or 0
         description = request.form.get('description', '')
+        if price < 0 or stock < 0:
+            flash('Price and stock cannot be negative.', 'danger')
+            return render_template('admin/component_form.html', component=None, categories=categories, brands=brands)
         if name and category_id is not None:
             try:
                 c = Component(name=name, category_id=category_id, brand_id=brand_id, price=price, stock=stock, description=description)
@@ -425,12 +460,17 @@ def component_edit(component_id):
     categories = ComponentCategory.query.all()
     brands = _get_brands_for_dropdown()
     if request.method == 'POST':
+        price = request.form.get('price', type=float) or 0
+        stock = request.form.get('stock', type=int) or 0
+        if price < 0 or stock < 0:
+            flash('Price and stock cannot be negative.', 'danger')
+            return render_template('admin/component_form.html', component=component, categories=categories, brands=brands)
         component.name = request.form.get('name', component.name)
         component.category_id = request.form.get('category_id', type=int) or component.category_id
         raw_brand = request.form.get('brand_id', '').strip()
         component.brand_id = int(raw_brand) if raw_brand else None
-        component.price = request.form.get('price', type=float) or 0
-        component.stock = request.form.get('stock', type=int) or 0
+        component.price = price
+        component.stock = stock
         component.description = request.form.get('description', '')
         image_file = request.files.get('image')
         if image_file and image_file.filename:
@@ -474,21 +514,32 @@ def build_add():
         build_type = request.form.get('build_type', '')
         description = request.form.get('description', '')
         if name:
-            build = PcBuild(name=name, build_type=build_type, description=description, total_price=0)
-            db.session.add(build)
-            db.session.flush()
-            total = 0
             comp_ids = request.form.getlist('component_id')
             qty_list = request.form.getlist('quantity')
+            by_slot, qty_by_id, rows = {}, {}, []
+            total = 0
             for i, cid in enumerate(comp_ids):
                 if cid and int(cid) > 0:
                     qty = int(qty_list[i]) if i < len(qty_list) else 1
                     comp = Component.query.get(int(cid))
                     if comp:
-                        bc = BuildComponent(pc_build_id=build.id, component_id=comp.id, quantity=qty)
-                        db.session.add(bc)
+                        rows.append((comp, qty))
                         total += float(comp.price or 0) * qty
-            build.total_price = total
+                        slot = comp.category.name if comp.category else f'comp_{comp.id}'
+                        by_slot[slot] = comp
+                        qty_by_id[comp.id] = qty_by_id.get(comp.id, 0) + qty
+
+            errors = _validate_build_components(by_slot, qty_by_id)
+            if errors:
+                for err in errors:
+                    flash(err, 'danger')
+                return render_template('admin/build_form.html', build=None, components=components, categories=categories)
+
+            build = PcBuild(name=name, build_type=build_type, description=description, total_price=total)
+            db.session.add(build)
+            db.session.flush()
+            for comp, qty in rows:
+                db.session.add(BuildComponent(pc_build_id=build.id, component_id=comp.id, quantity=qty))
             db.session.commit()
             flash('Build added.', 'success')
             return redirect(url_for('admin.builds_list'))
@@ -503,21 +554,33 @@ def build_edit(build_id):
     components = Component.query.all()
     categories = ComponentCategory.query.all()
     if request.method == 'POST':
-        build.name = request.form.get('name', build.name)
-        build.build_type = request.form.get('build_type', build.build_type)
-        build.description = request.form.get('description', build.description)
-        BuildComponent.query.filter_by(pc_build_id=build.id).delete()
-        total = 0
         comp_ids = request.form.getlist('component_id')
         qty_list = request.form.getlist('quantity')
+        by_slot, qty_by_id, rows = {}, {}, []
+        total = 0
         for i, cid in enumerate(comp_ids):
             if cid and int(cid) > 0:
                 qty = int(qty_list[i]) if i < len(qty_list) else 1
                 comp = Component.query.get(int(cid))
                 if comp:
-                    bc = BuildComponent(pc_build_id=build.id, component_id=comp.id, quantity=qty)
-                    db.session.add(bc)
+                    rows.append((comp, qty))
                     total += float(comp.price or 0) * qty
+                    slot = comp.category.name if comp.category else f'comp_{comp.id}'
+                    by_slot[slot] = comp
+                    qty_by_id[comp.id] = qty_by_id.get(comp.id, 0) + qty
+
+        errors = _validate_build_components(by_slot, qty_by_id)
+        if errors:
+            for err in errors:
+                flash(err, 'danger')
+            return render_template('admin/build_form.html', build=build, components=components, categories=categories)
+
+        build.name = request.form.get('name', build.name)
+        build.build_type = request.form.get('build_type', build.build_type)
+        build.description = request.form.get('description', build.description)
+        BuildComponent.query.filter_by(pc_build_id=build.id).delete()
+        for comp, qty in rows:
+            db.session.add(BuildComponent(pc_build_id=build.id, component_id=comp.id, quantity=qty))
         build.total_price = total
         db.session.commit()
         flash('Build updated.', 'success')

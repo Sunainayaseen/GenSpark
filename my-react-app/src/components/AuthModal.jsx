@@ -16,6 +16,17 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
       setRegistrationSuccess(null);
     }
   }, [isOpen, initialMode]);
+
+  // Escape closes the modal for keyboard-only users (the overlay click-to-close
+  // has no keyboard equivalent otherwise).
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
   const [role, setRole] = useState('buyer');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -109,9 +120,19 @@ const AuthModal = ({ isOpen, onClose, mode: initialMode = 'login', onFlaskLogin 
   };
 
   return (
-    <div className="auth-modal-overlay" onClick={onClose}>
-      <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={() => { setRegistrationSuccess(null); onClose(); }}>
+    <div
+      className="auth-modal-overlay"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="auth-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={mode === 'signup' ? 'Create an account' : 'Sign in'}
+      >
+        <button className="modal-close-btn" onClick={() => { setRegistrationSuccess(null); onClose(); }} aria-label="Close dialog">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>

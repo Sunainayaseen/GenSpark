@@ -410,6 +410,46 @@ def evaluate_change(build: dict, slot: str, new_part, purpose: str,
     hard = [f for f in result['failures'] if f['rule'] in _HARD_RULES]
     adjustable = [f for f in result['failures'] if f['rule'] in _ADJUSTABLE_RULES]
 
+    # Single-vendor-per-build: assembly is done by the supplying vendor, so a swap
+    # that leaves no single vendor able to supply the whole build is a hard block —
+    # takes priority over hardware compatibility, never silently allowed through.
+    #
+    # Must check against the vendor ALREADY locked to the current (pre-swap) build,
+    # not re-derive a fresh "best" vendor for the modified combination — otherwise
+    # this can pass by picking a different vendor than the one actually supplying
+    # the rest of the cart, while /api/build-options' dropdown ✗ marker (which
+    # checks the same locked vendor) correctly flags the part as unavailable from
+    # it. That mismatch showed as "Fully Compatible" under a ✗-marked selection.
+    from .vendor_coverage import (
+        check_build_vendor_consistency, is_build_component, VENDOR_CONFLICT_MESSAGE,
+    )
+    orig_check, orig_vendor = check_build_vendor_consistency(build)
+    if orig_vendor and is_build_component(new_part):
+        from app.models import VendorComponent
+        vc = VendorComponent.query.filter_by(
+            vendor_id=orig_vendor['id'], component_id=new_part.id,
+        ).first()
+        if vc and int(vc.quantity or 0) >= 1:
+            vendor_check = {
+                'rule': 'Vendor consistency', 'status': 'pass',
+                'detail': f"All parts available from {orig_vendor['shop_name']}.",
+                'conflicting_slots': [],
+            }
+        else:
+            vendor_check = {
+                'rule': 'Vendor consistency', 'status': 'fail',
+                'detail': VENDOR_CONFLICT_MESSAGE,
+                'conflicting_slots': [slot],
+            }
+    else:
+        vendor_check, _vendor = check_build_vendor_consistency(modified)
+    result['checks'].append(vendor_check)
+    if vendor_check['status'] == 'fail':
+        vendor_failure = {'rule': vendor_check['rule'], 'detail': vendor_check['detail'],
+                           'suggestions': []}
+        result['failures'].append(vendor_failure)
+        hard = hard + [vendor_failure]
+
     changes = []
     relevance = {'suitable': True, 'note': '', 'suggested': None}
 

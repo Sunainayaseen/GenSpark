@@ -56,3 +56,24 @@ def seconds_until_retry(key) -> int:
         if not times:
             return 0
         return max(0, int(WINDOW_SECONDS - (now - min(times))))
+
+
+# --- Generic per-key limiter (payment endpoints, etc.) ---------------------
+# Same in-process/best-effort model as the login limiter above. Separate store
+# so callers can't collide keys with the login limiter by accident.
+_generic_lock = Lock()
+_generic_hits = defaultdict(list)
+
+
+def hit(key, max_hits, window_seconds) -> bool:
+    """Record a call under `key` and return True if it is within the allowed
+    rate, False if the caller should be rejected (429)."""
+    now = time.time()
+    with _generic_lock:
+        hits = [t for t in _generic_hits[key] if now - t < window_seconds]
+        if len(hits) >= max_hits:
+            _generic_hits[key] = hits
+            return False
+        hits.append(now)
+        _generic_hits[key] = hits
+        return True

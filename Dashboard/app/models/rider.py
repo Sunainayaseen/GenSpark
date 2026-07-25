@@ -34,7 +34,7 @@ class Rider(db.Model):
     """Rider profile — mirrors the Vendor model pattern (one-to-one with User)."""
     __tablename__ = 'riders'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
     phone = db.Column(db.String(20))
     city = db.Column(db.String(100))
     vehicle_type = db.Column(db.String(50))   # bike, car, van

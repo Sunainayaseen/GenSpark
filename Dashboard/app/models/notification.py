@@ -6,7 +6,7 @@ from app import db
 class Notification(db.Model):
     __tablename__ = 'notifications'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     title = db.Column(db.String(150))
     message = db.Column(db.Text)
     type = db.Column(db.String(50))  # order_update, payment, shipment

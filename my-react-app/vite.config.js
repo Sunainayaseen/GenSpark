@@ -14,4 +14,15 @@ export default defineConfig({
       '/socket.io': { target: 'http://127.0.0.1:5000', ws: true, changeOrigin: true },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          stripe: ['@stripe/stripe-js', '@stripe/react-stripe-js'],
+          'socket-io': ['socket.io-client'],
+          motion: ['framer-motion'],
+        },
+      },
+    },
+  },
 })

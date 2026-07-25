@@ -3,8 +3,21 @@ import './CursorEffects.css';
 
 const HOVER_SELECTORS = 'a, button, [role="button"], input, select, textarea, .btn, [data-cursor-hover], [onclick]';
 
+function _detectEnabled() {
+  try {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const fine = window.matchMedia('(pointer: fine)').matches;
+    return !reduced && fine;
+  } catch (_) {
+    return false;
+  }
+}
+
 export default function CursorEffects() {
-  const [enabled, setEnabled] = useState(false);
+  // Computed once at mount via a lazy initializer (this component is client-
+  // only in this Vite SPA, never SSR'd) instead of an effect + setState, which
+  // would otherwise trigger an avoidable extra render on every mount.
+  const [enabled] = useState(_detectEnabled);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isHovering, setIsHovering] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -13,16 +26,6 @@ export default function CursorEffects() {
   const targetRef = useRef({ x: 0, y: 0 });
   const hoverRef = useRef(false);
   const prevHoverRef = useRef(false);
-
-  useEffect(() => {
-    try {
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const fine = window.matchMedia('(pointer: fine)').matches;
-      setEnabled(!reduced && fine);
-    } catch (_) {
-      setEnabled(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (!enabled) return;

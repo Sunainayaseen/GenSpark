@@ -28,7 +28,7 @@ passed) — the verdict says what could and could not be proven.
 """
 from __future__ import annotations
 
-from .hardware_specs import derive_specs
+from .hardware_specs import derive_specs, connector_count
 
 # Whole-system non-CPU/GPU draw (board + RAM + drives + fans), watts.
 _BASE_SYSTEM_W = 90
@@ -114,6 +114,19 @@ def validate_build(selected: dict, alt_lookup=None) -> dict:
             else:
                 add('CPU ↔ Motherboard memory', 'fail',
                     f'CPU supports {"/".join(cpu["ddr"])} but board is {"/".join(mobo["ddr"])}.')
+        # BIOS/firmware support: a newer CPU on an older same-socket chipset may
+        # need a BIOS update before it will even boot. This is solvable without
+        # any hardware change, so it is a 'warn' — never a hard 'fail' like a
+        # true socket mismatch.
+        if c_sock and m_sock and c_sock == m_sock and cpu.get('gen') and mobo.get('bios_gen_ceiling'):
+            if cpu['gen'] > mobo['bios_gen_ceiling']:
+                add('CPU ↔ Motherboard BIOS support', 'warn',
+                    'This board\'s stock BIOS may predate this CPU — update the BIOS '
+                    f'before first boot (board ships supporting up to the '
+                    f'{mobo["bios_gen_ceiling"]} series/generation on this chipset).')
+            else:
+                add('CPU ↔ Motherboard BIOS support', 'pass',
+                    'CPU generation is within this board\'s stock BIOS support.')
     elif cpu or mobo:
         add('CPU ↔ Motherboard socket', 'skip', 'CPU or motherboard missing from build.')
 
@@ -164,10 +177,20 @@ def validate_build(selected: dict, alt_lookup=None) -> dict:
                 _suggest_psu(alt_lookup, int(draw * _PSU_HEADROOM)))
         else:
             add('PSU efficiency rating', 'pass', f'{psu.get("rating")} meets the 80+ Bronze minimum.')
-        # PCIe power connector presence for a discrete card.
-        if gpu and gpu.get('pcie_power'):
-            add('GPU ↔ PSU connectors', 'pass',
-                f'PSU provides {psu.get("pcie_connectors")} for the GPU\'s {gpu["pcie_power"]}.')
+        # PCIe power connector presence for a discrete card — an actual
+        # comparison of what the PSU provides vs. what the GPU needs (previously
+        # this only printed both values and unconditionally reported 'pass').
+        if gpu and gpu.get('pcie_power') and psu.get('pcie_connectors'):
+            conn_needed = connector_count(gpu['pcie_power'])
+            conn_available = connector_count(psu['pcie_connectors'])
+            if conn_available >= conn_needed:
+                add('GPU ↔ PSU connectors', 'pass',
+                    f'PSU\'s {psu["pcie_connectors"]} covers the GPU\'s {gpu["pcie_power"]} requirement.')
+            else:
+                add('GPU ↔ PSU connectors', 'fail',
+                    f'PSU only provides {psu["pcie_connectors"]} — not enough for the GPU\'s '
+                    f'{gpu["pcie_power"]} requirement.',
+                    _suggest_psu(alt_lookup, required))
 
     # ---- GPU ↔ Case clearance ---------------------------------------------
     if gpu and case:
@@ -180,6 +203,39 @@ def validate_build(selected: dict, alt_lookup=None) -> dict:
                 add('GPU ↔ Case clearance', 'fail',
                     f'{glen}mm card exceeds the {clear}mm case clearance.',
                     _suggest_case(alt_lookup, glen))
+
+    # ---- GPU ↔ Motherboard / Storage ↔ Motherboard PCIe generation ---------
+    # PCIe is backward/forward compatible — a slower board never blocks a build,
+    # it only caps bandwidth. So a generation mismatch is a 'warn', never a
+    # 'fail'; this was previously computed on both sides but never compared.
+    if mobo and gpu and mobo.get('pcie_gen') and gpu.get('pcie_gen'):
+        if gpu['pcie_gen'] <= mobo['pcie_gen']:
+            add('GPU ↔ Motherboard PCIe generation', 'pass',
+                f'PCIe Gen{gpu["pcie_gen"]} card runs at full speed on this Gen{mobo["pcie_gen"]} board.')
+        else:
+            add('GPU ↔ Motherboard PCIe generation', 'warn',
+                f'PCIe Gen{gpu["pcie_gen"]} card will run at Gen{mobo["pcie_gen"]} speed on this '
+                'board — it still works, just with capped bandwidth.')
+    if mobo and storage and storage.get('pcie_gen') and mobo.get('pcie_gen'):
+        if storage['pcie_gen'] <= mobo['pcie_gen']:
+            add('Storage ↔ Motherboard PCIe generation', 'pass',
+                f'PCIe Gen{storage["pcie_gen"]} drive runs at full speed on this Gen{mobo["pcie_gen"]} board.')
+        else:
+            add('Storage ↔ Motherboard PCIe generation', 'warn',
+                f'PCIe Gen{storage["pcie_gen"]} drive will run at Gen{mobo["pcie_gen"]} speed on this '
+                'board — it still works, just with capped bandwidth.')
+
+    # ---- Cooler ↔ Case clearance -------------------------------------------
+    if cooler and case:
+        ch, cc = cooler.get('height_mm'), case.get('cooler_height_mm')
+        if ch and cc:
+            if ch <= cc:
+                add('Cooler ↔ Case clearance', 'pass',
+                    f'{ch}mm cooler fits the {cc}mm case clearance.')
+            else:
+                add('Cooler ↔ Case clearance', 'fail',
+                    f'{ch}mm cooler exceeds the {cc}mm case clearance.',
+                    [f'Use a case with ≥ {ch}mm cooler clearance, or pick a low-profile/AIO cooler.'])
 
     # ---- Motherboard ↔ Case form factor -----------------------------------
     if mobo and case:

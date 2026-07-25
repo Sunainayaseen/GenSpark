@@ -266,7 +266,7 @@ const QUICK_PROMPTS = [
 const Chatbot = () => {
   const navigate = useNavigate();
   const { userRequirements, updateRequirements, setSelectedBuild, setBuilds } = useApp();
-  const { addToCart, applyCartFromServer } = useCart();
+  const { addBuildToCart, applyCartFromServer } = useCart();
 
   const [messages, setMessages] = useState([]);
   const showOnboarding = !messages.some((m) => m.type === 'user');
@@ -469,11 +469,13 @@ const Chatbot = () => {
   useEffect(() => {
     if (!cameraActive) return;
 
+    const videoNode = centerVideoRef.current;
+
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: 'environment' } })
       .then((s) => {
         streamRef.current = s;
-        if (centerVideoRef.current) centerVideoRef.current.srcObject = s;
+        if (videoNode) videoNode.srcObject = s;
       })
       .catch(() =>
         addBotMessage('Camera access was denied or not available. You can use image upload instead.')
@@ -484,7 +486,7 @@ const Chatbot = () => {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
-      if (centerVideoRef.current) centerVideoRef.current.srcObject = null;
+      if (videoNode) videoNode.srcObject = null;
     };
   }, [cameraActive]);
 
@@ -791,36 +793,34 @@ const Chatbot = () => {
 
   const handleAddToCart = async (componentsArg) => {
     // Preferred path: the DB-driven recommend-build already resolved every slot to
-    // a real catalog row, so add those component IDs straight to the cart — no
-    // name re-resolution. Uses /add-to-cart (vendor auto-assigned by the backend).
+    // a real catalog row, so add those component IDs straight to the cart via
+    // /cart/add-build — resolved server-side to ONE vendor (assembly is done by the
+    // supplying vendor, so a build can never be split across vendors).
     // componentsArg lets each chat build card add its OWN build (falls back to state).
     const comps = Array.isArray(componentsArg) ? componentsArg : buildComponents;
     if (Array.isArray(comps) && comps.length) {
       setErpSaving(true);
       let added = 0;
       try {
-        const failedLabels = [];
         const seen = new Set();
+        const components = [];
         for (const comp of comps) {
           const id = comp?.component_id ?? comp?.id;
           if (!id || seen.has(id)) continue;
           seen.add(id);
-          const ok = await addToCart({ id, item_type: 'component', vendor_id: null }, 1, { silent: true });
-          if (ok) added += 1;
-          else failedLabels.push(comp.label || comp.name || `#${id}`);
+          components.push({ component_id: id, quantity: 1 });
         }
-        if (added > 0) {
+        const result = await addBuildToCart(components);
+        if (result.ok) {
+          added = components.length;
           setErpBanner({
             type: 'success',
-            message: failedLabels.length
-              ? `Added ${added} part(s) to cart. Could not add: ${failedLabels.join(', ')}.`
+            message: result.vendor?.shop_name
+              ? `Added ${added} part(s) to cart — vendor: ${result.vendor.shop_name}.`
               : `Added ${added} part(s) to cart. Open the cart to review your total.`,
           });
         } else {
-          setErpBanner({
-            type: 'error',
-            message: 'Could not add these parts — they may be out of stock right now. Try another budget.',
-          });
+          setErpBanner({ type: 'error', message: result.error || 'Could not add these parts to cart.' });
         }
       } catch (error) {
         setErpBanner({ type: 'error', message: formatDetectionError(error.message) });
@@ -1053,8 +1053,9 @@ const Chatbot = () => {
     }
 
     // Same path as the prebuilt PCs: resolve each part name to a real in-stock
-    // catalog component, then add by ID via /add-to-cart (vendor auto-assigned).
-    // No /cart/add-build-parts (that route 404s on the Dashboard backend).
+    // catalog component, then commit the whole build via /cart/add-build —
+    // pinned server-side to ONE vendor (GenSpark has no warehouse, so a build
+    // can never be split across vendors).
     setErpSaving(true);
     let added = 0;
     try {
@@ -1067,19 +1068,19 @@ const Chatbot = () => {
           : { name: SLOT_ORDER[i] || `Part ${i + 1}`, value: String(p) }
       );
       const { slots } = await resolveBuildParts(partsArray);
-      const result = await addResolvedBuildToCart(slots, addToCart, { silent: true });
+      const result = await addResolvedBuildToCart(slots, addBuildToCart);
       added = result.added;
       if (added > 0) {
         setErpBanner({
           type: 'success',
           message: result.failed.length
-            ? `Added ${added} part(s) to cart. Could not match: ${result.failed.join(', ')}.`
-            : `Added ${added} part(s) to cart — choose a vendor to continue.`,
+            ? `Added ${added} part(s) to cart (vendor: ${result.vendor?.shop_name || 'auto-assigned'}). Could not match: ${result.failed.join(', ')}.`
+            : `Added ${added} part(s) to cart — vendor: ${result.vendor?.shop_name || 'auto-assigned'}.`,
         });
       } else {
         setErpBanner({
           type: 'error',
-          message: 'Could not add this build — parts may be out of stock. Try another build or budget.',
+          message: result.error || 'Could not add this build — parts may be out of stock. Try another build or budget.',
         });
       }
     } catch (error) {
@@ -1399,13 +1400,6 @@ const Chatbot = () => {
                       <p className="detection-scope-note" style={{ fontSize: '0.78rem', opacity: 0.72, margin: '0.4rem 0 0' }}>
                         This detector recognizes <strong>CPU, GPU, RAM, motherboard, PSU, cooler and storage</strong>.
                         Other objects may be labeled as the closest of these — confirm before adding to a build.
-                      </p>
-                      <p className="detection-next-step">
-                        Component saved for your build. Set purpose and budget on the left, then click
-                        {' '}
-                        <strong>Get recommendations</strong>
-                        {' '}
-                        when you are ready for full PC options.
                       </p>
                     </div>
                   ) : msg.payload?.type === 'ai_recommendation' ? (

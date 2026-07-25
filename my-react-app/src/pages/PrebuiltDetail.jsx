@@ -14,7 +14,7 @@ const PrebuiltDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { setSelectedBuild, updateRequirements } = useApp();
-  const { addToCart, setIsCartOpen } = useCart();
+  const { addBuildToCart, setIsCartOpen } = useCart();
   const [adding, setAdding] = useState(false);
 
   const item = useMemo(() => getPrebuiltById(id), [id]);
@@ -92,13 +92,24 @@ const PrebuiltDetail = () => {
     setAdding(true);
     setCartMsg(null);
     try {
-      const { added, failed } = await addResolvedBuildToCart(resolution.slots, addToCart);
+      const { added, failed, vendor, error, conflict } = await addResolvedBuildToCart(
+        resolution.slots,
+        addBuildToCart
+      );
       if (added > 0) {
         setIsCartOpen(true);
         const note = failed.length
           ? ` (${failed.length} part${failed.length > 1 ? 's' : ''} skipped: ${failed.join(', ')})`
           : '';
-        setCartMsg({ type: 'success', text: `${added} component${added > 1 ? 's' : ''} added to cart.${note}` });
+        const vendorNote = vendor?.shop_name ? ` — all sourced from ${vendor.shop_name}.` : '';
+        setCartMsg({ type: 'success', text: `${added} component${added > 1 ? 's' : ''} added to cart.${vendorNote}${note}` });
+      } else if (conflict) {
+        setCartMsg({
+          type: 'error',
+          text: 'This Prebuilt PC is currently unavailable because no vendor has all required components in stock.',
+        });
+      } else if (error) {
+        setCartMsg({ type: 'error', text: error });
       } else {
         setCartMsg({
           type: 'error',
@@ -161,7 +172,17 @@ const PrebuiltDetail = () => {
                 alt={`${item.title} — ${item.category} PC`}
                 loading="eager"
                 decoding="async"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.parentElement.classList.add('prebuilt-detail-image-wrap--fallback');
+                }}
               />
+              <span className="prebuilt-detail-image-fallback-label" aria-hidden="true">
+                {item.title}
+              </span>
+            </div>
+            <div className="prebuilt-detail-price-chip">
+              PKR {item.price.toLocaleString('en-US')}
             </div>
           </div>
 
@@ -174,13 +195,13 @@ const PrebuiltDetail = () => {
             </header>
 
             <dl className="prebuilt-detail-stats">
-              <div className="prebuilt-detail-stat">
+              <div className="prebuilt-detail-stat prebuilt-detail-stat--price">
                 <dt>Price</dt>
                 <dd>
                   {summary && summary.total > 0 ? (
                     <>
                       PKR {summary.total.toLocaleString('en-US')}
-                      <span style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', fontWeight: 400 }}>
+                      <span className="prebuilt-detail-stat-sub">
                         live inventory · est. PKR {item.price.toLocaleString('en-US')}
                       </span>
                     </>
@@ -227,12 +248,12 @@ const PrebuiltDetail = () => {
                       <span className="prebuilt-detail-spec-value">
                         {part.value}
                         {showMatched && (
-                          <span style={{ display: 'block', fontSize: '0.74rem', color: '#64748b' }}>
+                          <span className="prebuilt-detail-spec-matched">
                             ↳ matched: {matchedName}
                           </span>
                         )}
                         {resolving && !res && (
-                          <span style={{ display: 'block', fontSize: '0.74rem', color: '#94a3b8' }}>
+                          <span className="prebuilt-detail-spec-matching">
                             matching inventory…
                           </span>
                         )}
@@ -270,13 +291,7 @@ const PrebuiltDetail = () => {
             {cartMsg && (
               <p
                 role="status"
-                style={{
-                  padding: '0.6rem 0.9rem',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  color: cartMsg.type === 'error' ? '#b91c1c' : '#065f46',
-                  background: cartMsg.type === 'error' ? '#fef2f2' : '#ecfdf5',
-                }}
+                className={`prebuilt-detail-cart-msg prebuilt-detail-cart-msg--${cartMsg.type}`}
               >
                 {cartMsg.text}
               </p>

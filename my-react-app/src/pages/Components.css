@@ -268,6 +268,7 @@
 }
 
 .components-filter-label {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -279,9 +280,24 @@
   white-space: nowrap;
 }
 
-.components-filter-select {
+.components-filter-label-text {
+  flex-shrink: 0;
+}
+
+/* Custom themed dropdown — native <select> popups ignore CSS on most
+   platforms, so this is a button + listbox instead of a real <select>. */
+.components-select {
+  position: relative;
   min-width: 11rem;
-  padding: 0.75rem 2rem 0.75rem 0.9rem;
+}
+
+.components-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(var(--charcoal-rgb), 0.14);
   background: var(--bg-primary);
@@ -291,17 +307,78 @@
   text-transform: none;
   letter-spacing: normal;
   cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233e4444' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.components-filter-select:focus {
+.components-select-trigger:hover {
+  border-color: rgba(var(--primary-rgb), 0.4);
+}
+
+.components-select-trigger:focus-visible,
+.components-select-trigger.is-open {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.14);
+}
+
+.components-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.components-select-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.18s ease;
+}
+
+.components-select-trigger.is-open .components-select-chevron {
+  transform: rotate(180deg);
+  color: var(--primary);
+}
+
+.components-select-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  right: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  background: var(--bg-primary);
+  border: 1px solid rgba(var(--charcoal-rgb), 0.12);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+  animation: componentsSelectMenuIn 0.14s ease both;
+}
+
+@keyframes componentsSelectMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.components-select-option {
+  padding: 0.55rem 0.75rem;
+  border-radius: calc(var(--radius-lg) - 4px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.components-select-option:hover {
+  background: rgba(var(--primary-rgb), 0.1);
+}
+
+.components-select-option.is-selected {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
 }
 
 .components-count {
@@ -853,7 +930,7 @@
     flex-wrap: wrap;
   }
 
-  .components-filter-select {
+  .components-select {
     flex: 1;
     min-width: 0;
     width: 100%;
@@ -996,7 +1073,7 @@
 /* ── Sticky toolbar so search/filter stays reachable ─────────── */
 .components-toolbar-panel {
   position: sticky;
-  top: 12px;
+  top: calc(var(--header-offset, 60px) + 12px);
   z-index: 20;
   backdrop-filter: blur(10px);
   background: rgba(255, 255, 255, 0.86);
@@ -1134,7 +1211,7 @@
 /* Keep chips comfortably tappable / scrollable on small screens. */
 @media (max-width: 640px) {
   .components-toolbar-panel {
-    top: 8px;
+    top: calc(var(--header-offset-mobile, 60px) + 8px);
   }
   .components-chips {
     flex-wrap: nowrap;

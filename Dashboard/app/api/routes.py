@@ -27,6 +27,8 @@ from sqlalchemy import or_, func
 
 from app.api.controllers.cart_controller import (
     add_to_cart as api_add_to_cart_controller,
+    add_build_to_cart as api_add_build_to_cart_controller,
+    get_build_vendor_options as api_get_build_vendor_options_controller,
     get_cart as api_get_cart_controller,
     update_cart as api_update_cart_controller,
     remove_item as api_remove_item_controller,
@@ -658,8 +660,11 @@ def place_order():
     if not cart_items:
         return jsonify({'success': False, 'error': 'Cart is empty'}), 400
 
+    from app.services.vendor_coverage import is_build_component, VENDOR_CONFLICT_MESSAGE
+
     normalized = []
     grand_total = 0.0
+    build_vendor_ids = set()
     for ci in cart_items:
         component = Component.query.get(ci.component_id) if ci.component_id else None
         if not component:
@@ -679,12 +684,34 @@ def place_order():
             'unit_price': unit_price,
             'total_price': total_price,
         })
+        if is_build_component(component) and ci.vendor_id:
+            build_vendor_ids.add(ci.vendor_id)
 
     if not normalized:
         return jsonify({'success': False, 'error': 'Cart has no valid items'}), 400
 
-    # Stock validation — lock each vendor's inventory row so concurrent checkouts
-    # for the same component can't all pass the check (released at commit/rollback below).
+    # Defense in depth: a PC build (CPU/GPU/Motherboard/RAM/Storage/PSU/Case) can
+    # only be assembled by the single vendor that supplied it — reject the whole
+    # order rather than create one that no vendor can fulfil. Standalone
+    # accessories are unaffected (they're excluded from build_vendor_ids above).
+    if len(build_vendor_ids) > 1:
+        return jsonify({
+            'success': False,
+            'error': VENDOR_CONFLICT_MESSAGE,
+            'code': 'MULTI_VENDOR_BUILD',
+        }), 400
+
+    # Single-vendor build ⇒ record that vendor on the master order too (not just on
+    # each line item), so Order.vendor_id matches the "Build vendor" shown at checkout.
+    # Accessory-only orders (no build components) leave it None — the per-vendor split
+    # is still derived from OrderItem.vendor_id at admin-approve.
+    build_vendor_id = next(iter(build_vendor_ids)) if len(build_vendor_ids) == 1 else None
+
+    # Stock reservation — lock each vendor's inventory row and decrement it now,
+    # in the same transaction the order is created in, so two concurrent
+    # placements for the last unit can't both pass a check-only read and then
+    # collide later at admin-approve. Restored on admin-reject or a post-
+    # approval vendor rejection (see admin_reject_order / vendor_order_update_status).
     for it in normalized:
         if not it['vendor_id']:
             continue
@@ -702,6 +729,7 @@ def place_order():
                 'code': 'INSUFFICIENT_STOCK',
                 'component_name': it['component_name'],
             }), 409
+        inv.quantity = int(inv.quantity or 0) - it['quantity']
 
     # Match React checkout: flat shipping when there is at least one line (see Checkout.jsx).
     SHIPPING_FLAT_PKR = 2000.0
@@ -735,6 +763,7 @@ def place_order():
     order = Order(
         user_id=current_user.id,
         order_number=_next_order_number('ORD'),
+        vendor_id=build_vendor_id,
         total_amount=order_grand_total,
         shipping_fee=shipping_fee,
         status='pending',
@@ -840,6 +869,8 @@ def admin_approve_order(order_id):
             unit_price = float(it.unit_price or 0)
             line_total = unit_price * qty
             subtotal += line_total
+            # Stock for this item was already reserved (decremented) at order
+            # placement time (see place_order) — do not decrement again here.
             db.session.add(VendorOrderItem(
                 vendor_order_id=v_order.id,
                 component_id=it.item_id,
@@ -848,20 +879,6 @@ def admin_approve_order(order_id):
                 unit_price=unit_price,
                 total_price=line_total,
             ))
-            inv = (
-                VendorComponent.query
-                .filter_by(vendor_id=vendor_id, component_id=it.item_id)
-                .with_for_update()
-                .first()
-            )
-            if not inv or int(inv.quantity or 0) < qty:
-                db.session.rollback()
-                return jsonify({
-                    'success': False,
-                    'error': f"Insufficient stock for {it.component_name} (vendor #{vendor_id})",
-                    'code': 'INSUFFICIENT_STOCK',
-                }), 409
-            inv.quantity = int(inv.quantity or 0) - qty
 
         v_order.total_amount = subtotal
         generated_orders.append({
@@ -907,6 +924,21 @@ def admin_reject_order(order_id):
         return jsonify({'success': False, 'error': 'Vendor orders already exist; use support to cancel'}), 400
     payload = request.get_json(silent=True) or {}
     reason = (payload.get('reason') or '').strip()
+
+    # Stock for these items was reserved (decremented) at placement time; since
+    # no vendor order was ever created (guarded above), give it back now.
+    for it in parent.items.all():
+        if not it.vendor_id or not it.item_id:
+            continue
+        inv = (
+            VendorComponent.query
+            .filter_by(vendor_id=it.vendor_id, component_id=it.item_id)
+            .with_for_update()
+            .first()
+        )
+        if inv:
+            inv.quantity = int(inv.quantity or 0) + int(it.quantity or 0)
+
     parent.status = 'rejected'
     note_line = f'admin_reject_reason={reason}' if reason else 'admin_reject'
     parent.notes = (parent.notes or '') + '\n' + note_line
@@ -980,12 +1012,25 @@ def vendor_order_update_status(vendor_order_id):
     if new_status not in ('accepted', 'assembling', 'completed', 'rejected'):
         return jsonify({'success': False, 'error': 'Invalid status'}), 400
 
+    previous_status = vo.status
     vo.status = new_status
     if proof_image_url:
         vo.proof_image_url = proof_image_url
         vo.proof_approved = False
     if new_status == 'rejected':
         vo.rejection_reason = (payload.get('rejection_reason') or '').strip() or None
+        if previous_status != 'rejected':
+            # Stock for these items was decremented when the parent order was
+            # admin-approved — give it back now that this vendor won't fulfil them.
+            for voi in vo.items.all():
+                inv = (
+                    VendorComponent.query
+                    .filter_by(vendor_id=vendor.id, component_id=voi.component_id)
+                    .with_for_update()
+                    .first()
+                )
+                if inv:
+                    inv.quantity = int(inv.quantity or 0) + int(voi.quantity or 0)
 
     order = Order.query.get(vo.order_id)
     if order:
@@ -1019,6 +1064,16 @@ def list_vendors():
 @api_bp.route('/add-to-cart', methods=['POST'])
 def api_add_to_cart():
     return api_add_to_cart_controller()
+
+
+@api_bp.route('/cart/add-build', methods=['POST'])
+def api_add_build_to_cart():
+    return api_add_build_to_cart_controller()
+
+
+@api_bp.route('/cart/build-coverage', methods=['POST'])
+def api_get_build_vendor_options():
+    return api_get_build_vendor_options_controller()
 
 
 @api_bp.route('/cart', methods=['GET'])
@@ -1374,9 +1429,21 @@ def _update_password_from_email_otp(email, current_otp, new_password):
         return jsonify({'success': False, 'error': 'New password must be at least 6 characters'}), 400
 
     from app.utils.jwt_session_bridge import find_user_by_email
+    from app.utils.rate_limit import login_key, is_locked_out, record_failure, record_success
+
+    # This endpoint is intentionally unauthenticated (see below), so a seeded/
+    # leaked one-time password is otherwise brute-forceable with no lockout —
+    # apply the same IP+email limiter used on /login.
+    rl_key = login_key(request.remote_addr, email)
+    if is_locked_out(rl_key):
+        return jsonify({
+            'success': False,
+            'error': 'Too many attempts. Please wait a few minutes and try again.',
+        }), 429
 
     user = find_user_by_email(email)
     if not user:
+        record_failure(rl_key)
         return jsonify({'success': False, 'error': 'No account found for this email'}), 404
 
     # Hardening: this endpoint has no auth decorator (it must work for the forced
@@ -1396,11 +1463,13 @@ def _update_password_from_email_otp(email, current_otp, new_password):
         }), 403
 
     if not user.check_password(current_otp):
+        record_failure(rl_key)
         return jsonify({
             'success': False,
             'error': 'Current password is wrong. Use the one-time password from registration or admin.',
         }), 400
 
+    record_success(rl_key)
     user.set_password(new_password)
     user.must_change_password = False
     db.session.commit()
