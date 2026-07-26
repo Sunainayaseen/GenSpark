@@ -1,7 +1,7 @@
 # GenSpark - Flask Application Factory
 import os
 
-from flask import Flask, request, make_response, jsonify, redirect, url_for
+from flask import Flask, request, make_response, jsonify, redirect, url_for, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
@@ -187,6 +187,14 @@ def create_app(config_name='default'):
     def index():
         """Keep legacy behavior: root opens login/dashboard flow."""
         return redirect(url_for('auth.login'))
+
+    @app.route('/uploads/<path:filename>')
+    def uploaded_file(filename):
+        """Serves component/catalog images at the bare /uploads/... URL stored in
+        Component.image_url (historical format, predates this app's static/
+        folder). Files physically live under app/static/uploads/ — see
+        app/utils/component_media.py, the writer for this same directory."""
+        return send_from_directory(os.path.join(app.static_folder, 'uploads'), filename)
 
     @app.errorhandler(500)
     def internal_server_error(e):

@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getApiUrl, getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
-import { getAuthHeaders } from '../utils/authStorage';
+import { getFlaskBase, getFlaskBaseFallback } from '../utils/flaskBase';
 import { dashboardGet } from '../api/dashboardApi';
 import { useCart } from '../context/CartContext';
 import {
@@ -35,12 +34,8 @@ const ComponentCard = memo(function ComponentCard({
   c,
   hasVendor,
   vendorCount,
-  expanded,
-  vd,
-  vendorLoadingId,
   apiBase,
   onAdd,
-  onVendors,
 }) {
   const kind = useMemo(
     () => getComponentPlaceholderKind(c.category, c.name),
@@ -169,40 +164,7 @@ const ComponentCard = memo(function ComponentCard({
             </svg>
             {hasVendor ? 'Add to cart' : 'Unavailable'}
           </button>
-          <button
-            type="button"
-            className="btn btn-secondary components-details-btn"
-            onClick={() => onVendors(c.id)}
-            disabled={vendorLoadingId === c.id}
-          >
-            {vendorLoadingId === c.id
-              ? 'Loading…'
-              : expanded
-                ? 'Hide vendors'
-                : 'Who has stock?'}
-          </button>
         </div>
-        {expanded && (
-          <div className="components-vendor-list" role="region" aria-label="Vendors">
-            {vd?.error && <p className="components-vendor-error">{vd.error}</p>}
-            {Array.isArray(vd) && vd.length === 0 && !vd?.error && (
-              <p>No vendors with stock for this part.</p>
-            )}
-            {Array.isArray(vd) &&
-              vd.map((v) => (
-                <div key={v.id} className="components-vendor-row">
-                  <strong>{v.shop_name}</strong>
-                  <span>
-                    {v.city ? `${v.city} · ` : ''}
-                    qty {v.available_quantity}
-                    {v.vendor_price != null
-                      ? ` · PKR ${Number(v.vendor_price).toLocaleString('en-US')}`
-                      : ''}
-                  </span>
-                </div>
-              ))}
-          </div>
-        )}
       </div>
     </li>
   );
@@ -215,9 +177,6 @@ export default function Components() {
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [expandedId, setExpandedId] = useState(null);
-  const [vendorDetails, setVendorDetails] = useState({});
-  const [vendorLoadingId, setVendorLoadingId] = useState(null);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const searchInputRef = useRef(null);
   const categorySelectRef = useRef(null);
@@ -290,45 +249,6 @@ export default function Components() {
   }, [items, query, categoryFilter]);
 
   const hasActiveFilters = Boolean(query.trim() || categoryFilter);
-
-  // Mirrors vendorDetails so fetchVendorsFor can stay referentially stable
-  // (useCallback deps: []) without going stale — keeps ComponentCard's
-  // React.memo effective across re-renders.
-  const vendorDetailsRef = useRef(vendorDetails);
-  useEffect(() => {
-    vendorDetailsRef.current = vendorDetails;
-  }, [vendorDetails]);
-
-  const fetchVendorsFor = useCallback(async (componentId) => {
-    if (vendorDetailsRef.current[componentId]) {
-      setExpandedId((id) => (id === componentId ? null : componentId));
-      return;
-    }
-    setVendorLoadingId(componentId);
-    try {
-      const res = await fetch(getApiUrl(`/components/${componentId}/vendors`), {
-        credentials: 'include',
-        headers: getAuthHeaders(),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Could not load vendors');
-      }
-      setVendorDetails((prev) => ({
-        ...prev,
-        [componentId]: Array.isArray(data.vendors) ? data.vendors : [],
-      }));
-      setExpandedId(componentId);
-    } catch (e) {
-      setVendorDetails((prev) => ({
-        ...prev,
-        [componentId]: { error: e.message || 'Failed' },
-      }));
-      setExpandedId(componentId);
-    } finally {
-      setVendorLoadingId(null);
-    }
-  }, []);
 
   const handleAdd = useCallback(
     async (c) => {
@@ -600,8 +520,6 @@ export default function Components() {
               c.has_vendor_stock === true ||
               (c.vendors_with_stock != null && c.vendors_with_stock > 0);
             const vendorCount = c.vendors_with_stock ?? (hasVendor ? 1 : 0);
-            const expanded = expandedId === c.id;
-            const vd = vendorDetails[c.id];
 
             return (
               <ComponentCard
@@ -609,12 +527,8 @@ export default function Components() {
                 c={c}
                 hasVendor={hasVendor}
                 vendorCount={vendorCount}
-                expanded={expanded}
-                vd={vd}
-                vendorLoadingId={vendorLoadingId}
                 apiBase={apiBase}
                 onAdd={handleAdd}
-                onVendors={fetchVendorsFor}
               />
             );
           })}

@@ -16,6 +16,16 @@ function timeAgo(iso) {
   try { return d.toLocaleDateString('en-PK', { day: '2-digit', month: 'short' }); } catch (_) { return ''; }
 }
 
+function exactTime(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('en-PK', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch (_) { return ''; }
+}
+
 /** Header notification bell: unread badge + dropdown list, live via Socket.IO. */
 const NotificationBell = () => {
   const { user, isLoggedIn } = useAuth();
@@ -115,7 +125,11 @@ const NotificationBell = () => {
                   <span className="hum-notif-body">
                     <span className="hum-notif-title">{n.title}</span>
                     <span className="hum-notif-msg">{n.message}</span>
-                    {n.created_at && <span className="hum-notif-time">{timeAgo(n.created_at)}</span>}
+                    {n.created_at && (
+                      <span className="hum-notif-time" title={exactTime(n.created_at)}>
+                        {timeAgo(n.created_at)} · {exactTime(n.created_at)}
+                      </span>
+                    )}
                   </span>
                 </button>
               ))

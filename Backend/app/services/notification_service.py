@@ -237,13 +237,15 @@ def notify(event, *, user_id=None, phone=None, related_id=None, context=None, ch
     nid = _save_in_app(user_id, title, message, ntype, related_id)
 
     # Channel: real-time push (Socket.IO) → instant toast on the client
+    # 'Z' suffix: created_at is naive UTC — without it, browsers parse the
+    # string as local time and under-count "time ago" by the UTC offset.
     _emit_realtime(user_id, {
         'id': nid,
         'title': title,
         'message': message,
         'type': ntype,
         'related_id': related_id,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.utcnow().isoformat() + 'Z',
     })
 
     return {'success': True, 'event': event, 'provider': result.get('provider', ACTIVE_PROVIDER),
@@ -348,7 +350,7 @@ def notify_order_status(order, status=None):
     _emit_realtime(order.user_id, {
         'id': nid, 'title': title, 'message': message,
         'type': 'order_update', 'related_id': order.id,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.utcnow().isoformat() + 'Z',
     })
     return {'success': True, 'status': status}
 
@@ -380,7 +382,7 @@ def notify_vendor_order_assigned(vendor_order):
     _emit_realtime(vendor.user_id, {
         'id': nid, 'title': title, 'message': message,
         'type': 'order_update', 'related_id': vendor_order.order_id,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.utcnow().isoformat() + 'Z',
     })
     return {'success': True, 'vendor_id': vendor.id, 'notification_id': nid}
 
@@ -401,7 +403,7 @@ def notify_admins(title, message, *, ntype='admin_alert', related_id=None):
             _emit_realtime(admin.id, {
                 'id': nid, 'title': title, 'message': message,
                 'type': ntype, 'related_id': related_id,
-                'created_at': datetime.utcnow().isoformat(),
+                'created_at': datetime.utcnow().isoformat() + 'Z',
             })
             sent += 1
         return {'success': True, 'admins_notified': sent}

@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 SRC = Path(r"C:\Users\MMT\.cursor\projects\c-Users-MMT-Desktop-GenSpark\assets")
-ROOT = Path(r"C:\Users\MMT\Desktop\GenSpark\dataset")
+ROOT = Path(__file__).resolve().parents[1] / "dataset"
 TRAIN_I = ROOT / "images" / "train"
 VAL_I = ROOT / "images" / "val"
 TRAIN_L = ROOT / "labels" / "train"

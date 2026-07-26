@@ -1,15 +1,15 @@
 @echo off
 setlocal enabledelayedexpansion
-title GenSpark - Dashboard Dev (DB-driven API :5000 + React :5173)
+title GenSpark - Backend Dev (DB-driven API :5000 + React :5173)
 cd /d "%~dp0"
 
 echo ============================================================
-echo   GenSpark - Dashboard backend + React UI (local genspark_erp)
+echo   GenSpark - Backend API + React UI (local genspark_erp)
 echo   API : http://127.0.0.1:5000   (DB-driven recommend-build, real component IDs)
 echo   UI  : http://localhost:5173
 echo ------------------------------------------------------------
 echo   Use THIS launcher (not START-GENSPARK-DEV.bat) for the
-echo   one-click cart demo: it runs the Dashboard backend, which
+echo   one-click cart demo: it runs the Backend API, which
 echo   serves build_components from the seeded local catalog.
 echo ============================================================
 echo.
@@ -23,27 +23,25 @@ for %%P in (5000 5173) do (
 )
 timeout /t 1 /nobreak >nul
 
-set "DASH=%~dp0Dashboard"
+set "DASH=%~dp0Backend"
 set "PY=%DASH%\.venv\Scripts\python.exe"
 
 REM --- Backend venv check ---
 if not exist "%PY%" (
-  echo ERROR: Dashboard\.venv not found. Create it once:
+  echo ERROR: Backend\.venv not found. Create it once:
   echo     py -3.11 -m venv "%DASH%\.venv"
   echo     "%DASH%\.venv\Scripts\pip.exe" install -r "%DASH%\requirements.txt"
   pause
   exit /b 1
 )
 
-REM --- Quick MySQL reminder (the Dashboard backend needs genspark_erp on localhost) ---
-echo [check] Make sure MySQL is running and genspark_erp is seeded:
-echo         "%PY%" "%DASH%\seed_vendors_components.py"
-echo         "%PY%" "%DASH%\seed_prebuilt_parts.py"
-echo         "%PY%" "%DASH%\seed_build_components.py"
+REM --- Quick DB reminder (first run only: seeds roles + default admin/vendor) ---
+echo [check] First run only, seed the database:
+echo         "%PY%" "%DASH%\init_db.py"
 echo.
 
-echo [start] Dashboard backend on :5000  (first start takes ~15s while YOLO preloads)...
-start "GenSpark Dashboard API :5000" cmd /k "cd /d "%DASH%" && set FLASK_ENV=development && set PYTHONUTF8=1 && set PYTHONIOENCODING=utf-8 && "%PY%" run.py"
+echo [start] Backend API on :5000  (first start takes ~15s while YOLO preloads)...
+start "GenSpark Backend API :5000" cmd /k "cd /d "%DASH%" && set FLASK_ENV=development && set PYTHONUTF8=1 && set PYTHONIOENCODING=utf-8 && "%PY%" run.py"
 timeout /t 3 /nobreak >nul
 
 REM --- React deps (first run only) ---

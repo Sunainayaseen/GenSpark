@@ -1,7 +1,7 @@
 """
-Train YOLOv8 on dataset/data.yaml and deploy weights to vendor dashboard/models/best.pt.
+Train YOLOv8 on dataset/data.yaml and deploy weights to Dashboard/models/best.pt.
 
-Usage (from repo root):
+Usage (from Dashboard/ml/):
   python tools/import_monitor_assets.py
   python tools/train_yolov8.py
   python tools/train_yolov8.py --epochs 80 --imgsz 640
@@ -15,7 +15,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 DATA_YAML = REPO / "dataset" / "data.yaml"
-DEPLOY_WEIGHTS = REPO / "vendor dashboard" / "models" / "best.pt"
+DEPLOY_WEIGHTS = REPO.parent / "models" / "best.pt"
 RUNS_DIR = REPO / "runs" / "detect"
 
 
@@ -26,7 +26,7 @@ def main() -> None:
     parser.add_argument("--batch", type=int, default=8, help="Batch size (-1 = auto)")
     parser.add_argument("--base", default="yolov8n.pt", help="Base checkpoint")
     parser.add_argument("--name", default="genspark_components", help="Run name under runs/detect")
-    parser.add_argument("--no-deploy", action="store_true", help="Skip copy to vendor dashboard/models")
+    parser.add_argument("--no-deploy", action="store_true", help="Skip copy to Dashboard/models")
     args = parser.parse_args()
 
     if not DATA_YAML.is_file():

@@ -789,43 +789,6 @@
   transform: none !important;
 }
 
-.components-details-btn {
-  font-size: 0.8125rem;
-}
-
-/* Vendor expand */
-.components-vendor-list {
-  margin-top: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
-  border: 1px solid rgba(var(--charcoal-rgb), 0.08);
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-
-.components-vendor-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.55rem 0;
-  border-bottom: 1px solid rgba(var(--charcoal-rgb), 0.08);
-}
-
-.components-vendor-row:last-child {
-  border-bottom: none;
-}
-
-.components-vendor-row strong {
-  color: var(--text-primary);
-  font-size: 0.875rem;
-}
-
-.components-vendor-error {
-  color: #b91c1c;
-  margin: 0;
-}
-
 /* Skeleton loading */
 .components-grid--skeleton {
   pointer-events: none;

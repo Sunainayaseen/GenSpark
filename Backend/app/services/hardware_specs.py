@@ -7,10 +7,9 @@ specs (socket, chipset, DDR generation, wattage, PCIe connectors, clearances, �
 validate a build by rule instead of by guesswork.
 
 `derive_specs(name)` parses a name into that structured form using deterministic
-rules + small model lookup tables. It is the single source of truth used by BOTH:
-
-  * seed_component_specs.py — to persist specs onto Component.specs (one-time), and
-  * compatibility.py        — as a live fallback for any part not yet seeded.
+rules + small model lookup tables. It is the single source of truth: any one-time
+seeding of Component.specs and compatibility.py's live fallback (for parts not yet
+seeded) both derive from this same function, so specs never drift out of sync.
 
 Every value is derived from the name only (never guessed at random); unknown parts
 return conservative defaults flagged with `confident: False` so the validator can

@@ -1,6 +1,6 @@
 /**
  * Rule-based build compatibility — mirrors the backend validator in
- * chat_intelligence.py (no network, no LLM). Given a parsed build's parts
+ * Dashboard/app/services/chat_intelligence.py (no network, no LLM). Given a parsed build's parts
  * ({ type, name, price }), it validates CPU-socket and RAM-generation coherence
  * against the motherboard and returns a per-component ✓/✗ status plus an overall
  * score so the Build preview panel can highlight conflicts.

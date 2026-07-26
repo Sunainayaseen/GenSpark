@@ -16,7 +16,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 from flask import jsonify, request
@@ -28,13 +27,10 @@ BACKEND_DIR = REPO_ROOT / 'backend'
 BACKEND_PY = BACKEND_DIR / '.venv' / 'Scripts' / 'python.exe'
 AI_CLI = BACKEND_DIR / 'scripts' / 'ai_api_cli.py'
 
-# Rule-based upgrade-compatibility validator lives at the repo root (no app deps,
-# shared with backend/app.py). Imported here so the live Dashboard chat route can
-# answer "upgrade my RAM/CPU…" with a compatible/incompatible verdict.
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# Rule-based upgrade-compatibility validator (no Flask/DB deps) — answers
+# "upgrade my RAM/CPU…" with a compatible/incompatible verdict.
 try:
-    from chat_intelligence import evaluate_upgrade_request
+    from app.services.chat_intelligence import evaluate_upgrade_request
 except Exception as _upgrade_import_err:  # pragma: no cover - keep route alive
     evaluate_upgrade_request = None
     print('upgrade validator unavailable:', _upgrade_import_err)

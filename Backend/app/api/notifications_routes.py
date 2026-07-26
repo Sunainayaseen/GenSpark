@@ -23,7 +23,10 @@ def _serialize(n):
         'type': n.type,
         'related_id': n.related_id,
         'is_read': bool(n.is_read),
-        'created_at': n.created_at.isoformat() if n.created_at else None,
+        # created_at is stored as naive UTC (datetime.utcnow()) — append 'Z' so
+        # browsers parse it as UTC instead of local time, which under-counts
+        # "ago" by the local UTC offset (e.g. shows "5h ago" for PKT/UTC+5).
+        'created_at': (n.created_at.isoformat() + 'Z') if n.created_at else None,
     }
 
 

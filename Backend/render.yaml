@@ -1,10 +1,10 @@
 # Render.com — alternative if Railway app was deleted
-# Dashboard: New → Blueprint → connect repo → set root to Dashboard
+# Dashboard: New → Blueprint → connect repo → set root to Backend
 services:
   - type: web
     name: genspark-api
     runtime: python
-    rootDir: Dashboard
+    rootDir: Backend
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 run:app
     healthCheckPath: /api/health
