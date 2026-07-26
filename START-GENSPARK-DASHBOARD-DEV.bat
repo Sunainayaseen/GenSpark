@@ -23,12 +23,12 @@ for %%P in (5000 5173) do (
 )
 timeout /t 1 /nobreak >nul
 
-set "DASH=%~dp0Backend"
+set "DASH=%~dp0backend"
 set "PY=%DASH%\.venv\Scripts\python.exe"
 
 REM --- Backend venv check ---
 if not exist "%PY%" (
-  echo ERROR: Backend\.venv not found. Create it once:
+  echo ERROR: backend\.venv not found. Create it once:
   echo     py -3.11 -m venv "%DASH%\.venv"
   echo     "%DASH%\.venv\Scripts\pip.exe" install -r "%DASH%\requirements.txt"
   pause
@@ -45,15 +45,15 @@ start "GenSpark Backend API :5000" cmd /k "cd /d "%DASH%" && set FLASK_ENV=devel
 timeout /t 3 /nobreak >nul
 
 REM --- React deps (first run only) ---
-if not exist "%~dp0my-react-app\node_modules" (
-  echo [setup] npm install (my-react-app) - first run only...
-  pushd "%~dp0my-react-app"
+if not exist "%~dp0frontend\node_modules" (
+  echo [setup] npm install (frontend) - first run only...
+  pushd "%~dp0frontend"
   call npm install
   popd
 )
 
 echo [start] React UI on :5173 ...
-start "GenSpark React UI :5173" cmd /k "cd /d "%~dp0my-react-app" && npm run dev"
+start "GenSpark React UI :5173" cmd /k "cd /d "%~dp0frontend" && npm run dev"
 
 echo.
 echo Done. Open in browser:

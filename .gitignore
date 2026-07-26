@@ -26,7 +26,7 @@ dist/
 # OS / editor
 .DS_Store
 Thumbs.db
-Backend/logs/*.log
+backend/logs/*.log
 
 # AI assistant local config — not part of the project
 .claude/

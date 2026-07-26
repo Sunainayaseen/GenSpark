@@ -19,7 +19,7 @@ detection**, a multi-vendor marketplace, rider delivery tracking, and an admin p
 | **MySQL Server** | 8.0+ | Database `genspark_erp`. |
 | **MySQL Workbench** | latest | To import the database (optional — CLI works too). |
 | OS | Windows 10/11 (or macOS/Linux) | Commands below shown for Windows. |
-| Disk | ~5 GB free | `Dashboard/requirements.txt` installs PyTorch (CPU) for YOLO detection. |
+| Disk | ~5 GB free | `backend/requirements.txt` installs PyTorch (CPU) for YOLO detection. |
 
 ---
 
@@ -28,27 +28,28 @@ detection**, a multi-vendor marketplace, rider delivery tracking, and an admin p
 ```
 GenSpark/
 ├── README.md                ← this file
-├── genspark_erp.sql         ← MySQL database dump (import this first)
-├── chat_intelligence.py      ← rule-based upgrade-evaluator, imported by Dashboard
-├── Dashboard/                ← the Flask app — run this for the full demo
-│   ├── run.py                ← entry point (python run.py → :5000)
-│   ├── config.py             ← reads DB settings from .env
+├── LICENSE
+├── docs/                     ← project documentation (guides, API reference, use-case diagram)
+├── database/                 ← schema.sql + sample_data.sql (see Section 3)
+├── backend/                  ← the Flask app — run this for the full demo
+│   ├── run.py                 ← entry point (python run.py → :5000)
+│   ├── config.py              ← reads DB settings from .env
 │   ├── requirements.txt
-│   ├── .env.example          ← copy to .env and fill in your MySQL credentials
-│   ├── app/                  ← admin/vendor/rider/api blueprints, models, services
-│   └── models/best.pt        ← trained YOLOv8 weights used by Dashboard's /api/detect
-└── my-react-app/             ← React (Vite) single-page app
+│   ├── .env.example           ← copy to .env and fill in your MySQL credentials
+│   ├── app/                   ← admin/vendor/rider/api blueprints, models, services
+│   │   └── services/chat_intelligence.py  ← rule-based upgrade-evaluator
+│   ├── models/best.pt         ← trained YOLOv8 weights used by backend's /api/detect
+│   └── ml/                    ← YOLOv8 training pipeline + standalone detection script
+└── frontend/                 ← React (Vite) single-page app
     ├── package.json
     ├── vite.config.js        ← dev proxy: /api → http://127.0.0.1:5000
     └── src/
 ```
 
-> **`Dashboard/` is the only backend.** It has the MySQL-backed ERP (orders,
+> **`backend/` is the only backend.** It has the MySQL-backed ERP (orders,
 > multi-vendor split, rider dispatch, admin/vendor/rider panels) and its own
 > DB-driven `/api/recommend-build` and `/api/detect` endpoints — a rule-based
-> AI engine and YOLOv8 detection, both self-contained. The root-level
-> `chat_intelligence.py` is imported by `Dashboard/app/api/ai_build_routes.py`
-> for the "upgrade my part" feature — keep it next to `Dashboard/`, don't move it.
+> AI engine and YOLOv8 detection, both self-contained.
 > `node_modules/`, `.venv/`, caches and build output are excluded from this
 > submission — they regenerate during setup below.
 
@@ -56,29 +57,31 @@ GenSpark/
 
 ## 3. Database Restoration
 
-The dump `genspark_erp.sql` already contains `CREATE DATABASE genspark_erp` and all
-37 tables with data — you do **not** need to create the database manually.
+See `database/README.md` for full details. Quick version:
 
-### Option A — MySQL Workbench (GUI)
-1. Open **MySQL Workbench** and connect to your local MySQL server.
-2. Menu: **Server → Data Import**.
-3. Select **"Import from Self-Contained File"** and browse to `genspark_erp.sql`.
-4. Leave **Default Target Schema** blank (the file creates `genspark_erp` itself).
-5. Click **Start Import**.
-6. Refresh the **SCHEMAS** panel — `genspark_erp` should now appear.
-
-### Option B — Command line (faster)
-```bat
-mysql -u root -p < genspark_erp.sql
+```sql
+CREATE DATABASE genspark_erp;
 ```
-Enter your MySQL root password when prompted.
+
+```bat
+mysql -u root -p genspark_erp < database/schema.sql
+mysql -u root -p genspark_erp < database/sample_data.sql
+```
+
+Then seed a working default admin/vendor login (Section 7) with fresh password
+hashes — not shipped statically in this repo:
+
+```bat
+cd backend
+python init_db.py
+```
 
 ---
 
-## 4. Backend Setup — `Dashboard/`
+## 4. Backend Setup — `backend/`
 
 ```bat
-cd Dashboard
+cd backend
 
 REM 1. Create and activate a virtual environment (Python 3.11)
 py -3.11 -m venv .venv
@@ -105,14 +108,14 @@ The first request that uses the image/camera detector loads the YOLO model
 Open a **second terminal**:
 
 ```bat
-cd my-react-app
+cd frontend
 
 REM 1. Install dependencies
 npm install
 
 REM 2a. Development mode (hot reload) — recommended for the demo
 npm run dev
-REM   → http://localhost:5173 (proxies /api to Dashboard on :5000)
+REM   → http://localhost:5173 (proxies /api to backend on :5000)
 
 REM 2b. OR production build
 npm run build
@@ -125,11 +128,11 @@ Open **http://localhost:5173** in your browser.
 
 ## 6. Database Credentials (where to update)
 
-All DB settings are read from **`Dashboard/.env`** (loaded by `Dashboard/config.py`).
+All DB settings are read from **`backend/.env`** (loaded by `backend/config.py`).
 After copying `.env.example` → `.env`, set these to match your MySQL server:
 
 ```ini
-# Dashboard/.env
+# backend/.env
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root              # ← your MySQL username
@@ -138,7 +141,7 @@ DB_NAME=genspark_erp
 USE_SQLITE=0              # keep 0 to use MySQL
 ```
 
-- `Dashboard/config.py` builds the SQLAlchemy connection string from these values —
+- `backend/config.py` builds the SQLAlchemy connection string from these values —
   **no code change is needed**, only the `.env` file.
 - A connection error almost always means the `.env` credentials are wrong.
 
@@ -164,7 +167,7 @@ USE_SQLITE=0              # keep 0 to use MySQL
 | Frontend (React) | `npm run dev` | http://localhost:5173 |
 | Health check | — | http://127.0.0.1:5000/health → `OK` |
 
-Run **both** at the same time (two terminals: `Dashboard/` then `my-react-app/`).
+Run **both** at the same time (two terminals: `backend/` then `frontend/`).
 Use the storefront at `:5173`; it talks to the API at `:5000` automatically.
 
 ---
@@ -173,25 +176,26 @@ Use the storefront at `:5173`; it talks to the API at `:5000` automatically.
 
 | Problem | Fix |
 |---------|-----|
-| `Access denied for user` / DB connection error | Wrong MySQL login in `Dashboard/.env`. Fix `DB_USER` / `DB_PASSWORD`. |
+| `Access denied for user` / DB connection error | Wrong MySQL login in `backend/.env`. Fix `DB_USER` / `DB_PASSWORD`. |
 | `Unknown database 'genspark_erp'` | The `.sql` import didn't run — redo **Section 3**. |
 | Port 5000 already in use | Close other Flask instances, or change `PORT` in the `.env`. Run only **one** service on :5000 at a time. |
 | Buttons / modals not responding | Hard-refresh the page (`Ctrl+Shift+R`) to clear cached JS/CSS. |
 | `ModuleNotFoundError` on backend | venv not activated, or `pip install -r requirements.txt` didn't finish. |
-| `npm run dev` fails | Delete `my-react-app/node_modules` and re-run `npm install` (Node 18+). |
-| Detection says "Unknown" | Use a clear, single-component photo on a plain background; `Dashboard/models/best.pt` must be present. |
-| Frontend loads but "Failed to fetch" / no data | `Dashboard/` isn't running or MySQL is down. Start it; check `:5000/health`. |
+| `npm run dev` fails | Delete `frontend/node_modules` and re-run `npm install` (Node 18+). |
+| Detection says "Unknown" | Use a clear, single-component photo on a plain background; `backend/models/best.pt` must be present. |
+| Frontend loads but "Failed to fetch" / no data | `backend/` isn't running or MySQL is down. Start it; check `:5000/health`. |
 
 ---
 
 ## 10. Examiner Deployment Checklist
 
 - [ ] Install Python 3.11, Node.js 18+, MySQL Server 8.0, MySQL Workbench.
-- [ ] Import `genspark_erp.sql` (Section 3) — confirm the `genspark_erp` schema appears.
-- [ ] `Dashboard/` → create venv → `pip install -r requirements.txt`.
-- [ ] Copy `Dashboard/.env.example` → `Dashboard/.env`, set MySQL `DB_USER` / `DB_PASSWORD`.
+- [ ] Import `database/schema.sql` + `database/sample_data.sql` (Section 3) — confirm the `genspark_erp` schema appears.
+- [ ] `backend/` → create venv → `pip install -r requirements.txt`.
+- [ ] Copy `backend/.env.example` → `backend/.env`, set MySQL `DB_USER` / `DB_PASSWORD`.
+- [ ] Run `python init_db.py` once to seed roles + demo admin/vendor accounts.
 - [ ] Run `python run.py` → open `http://127.0.0.1:5000/health` → shows `OK`.
-- [ ] `my-react-app/` → `npm install` → `npm run dev`.
+- [ ] `frontend/` → `npm install` → `npm run dev`.
 - [ ] Open `http://localhost:5173` → storefront loads.
 - [ ] Log in as Admin (`admin@genspark.com` / `admin123`).
 - [ ] AI Assistant: type "Gaming PC 120000" → a build with 100% compatibility appears.
